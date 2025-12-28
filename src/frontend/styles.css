@@ -1,0 +1,255 @@
+/**
+ * AI教学实验系统 - 样式文件
+ * 遵循良好的视觉准则和代码规范
+ */
+
+/* 打字机动画 */
+.typing-dot {
+    animation: bounce 1.4s infinite ease-in-out both;
+}
+
+.typing-dot:nth-child(1) {
+    animation-delay: -0.32s;
+}
+
+.typing-dot:nth-child(2) {
+    animation-delay: -0.16s;
+}
+
+@keyframes bounce {
+    0%, 80%, 100% {
+        transform: scale(0);
+    }
+    40% {
+        transform: scale(1);
+    }
+}
+
+/* 隐藏滚动条但保留功能 */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+/* 可拖动分隔条样式 */
+.resizer {
+    width: 4px;
+    background-color: #e5e7eb;
+    cursor: col-resize;
+    user-select: none;
+    transition: background-color 0.2s;
+    position: relative;
+    z-index: 10;
+}
+
+.resizer:hover {
+    background-color: #3b82f6;
+}
+
+.resizer:active {
+    background-color: #2563eb;
+}
+
+.resizer::before {
+    content: '';
+    position: absolute;
+    left: -2px;
+    right: -2px;
+    top: 0;
+    bottom: 0;
+}
+
+/* Markdown内容样式 */
+.prose {
+    color: inherit;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+    font-weight: 600;
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+    line-height: 1.25;
+}
+
+.prose h1 {
+    font-size: 1.5em;
+}
+
+.prose h2 {
+    font-size: 1.25em;
+}
+
+.prose h3 {
+    font-size: 1.125em;
+}
+
+.prose p {
+    margin-top: 1em;
+    margin-bottom: 1em;
+}
+
+.prose ul,
+.prose ol {
+    margin-top: 1em;
+    margin-bottom: 1em;
+    padding-left: 1.5em;
+}
+
+.prose li {
+    margin-top: 0.5em;
+    margin-bottom: 0.5em;
+}
+
+.prose code {
+    background-color: #e5e7eb;
+    color: #1f2937;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    font-size: 0.875em;
+    font-family: 'Courier New', monospace;
+    font-weight: 500;
+    border: 1px solid #d1d5db;
+}
+
+.prose pre {
+    background-color: #1f2937;
+    color: #f9fafb;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin-top: 1em;
+    margin-bottom: 1em;
+    border: 1px solid #374151;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.prose pre code {
+    background-color: transparent;
+    padding: 0;
+    color: #f9fafb;
+    font-size: 0.875em;
+    border: none;
+    font-weight: normal;
+}
+
+/* 覆盖highlight.js的样式，确保代码块有足够的对比度 */
+.prose pre code.hljs {
+    background: transparent !important;
+    color: #f9fafb !important;
+}
+
+.prose pre .hljs-keyword,
+.prose pre .hljs-selector-tag,
+.prose pre .hljs-built_in,
+.prose pre .hljs-name,
+.prose pre .hljs-type {
+    color: #60a5fa !important; /* 更亮的蓝色 */
+}
+
+.prose pre .hljs-string,
+.prose pre .hljs-attr {
+    color: #fbbf24 !important; /* 更亮的黄色 */
+}
+
+.prose pre .hljs-comment,
+.prose pre .hljs-quote {
+    color: #9ca3af !important; /* 更亮的灰色 */
+}
+
+.prose pre .hljs-number {
+    color: #34d399 !important; /* 更亮的绿色 */
+}
+
+.prose pre .hljs-function,
+.prose pre .hljs-title {
+    color: #a78bfa !important; /* 紫色 */
+}
+
+.prose blockquote {
+    border-left: 4px solid #3b82f6;
+    padding-left: 1em;
+    margin-left: 0;
+    margin-top: 1em;
+    margin-bottom: 1em;
+    color: #6b7280;
+    font-style: italic;
+}
+
+.prose hr {
+    border: none;
+    border-top: 1px solid #e5e7eb;
+    margin-top: 2em;
+    margin-bottom: 2em;
+}
+
+.prose strong {
+    font-weight: 600;
+}
+
+.prose em {
+    font-style: italic;
+}
+
+.prose a {
+    color: #3b82f6;
+    text-decoration: underline;
+}
+
+.prose table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1em;
+    margin-bottom: 1em;
+}
+
+.prose th,
+.prose td {
+    border: 1px solid #e5e7eb;
+    padding: 0.5rem;
+    text-align: left;
+}
+
+.prose th {
+    background-color: #f9fafb;
+    font-weight: 600;
+}
+
+/* 淡入动画 */
+@keyframes fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-fade-in {
+    animation: fade-in 0.3s ease-out;
+}
+
+/* 缩放进入动画 */
+@keyframes scale-in {
+    from {
+        transform: scale(0);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.animate-scale-in {
+    animation: scale-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+

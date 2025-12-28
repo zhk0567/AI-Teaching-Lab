@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI教学实验系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@11/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-gray-50 h-screen flex flex-col font-sans text-slate-800 overflow-hidden">
+
+    <!-- 顶部导航栏 -->
+    <div class="bg-slate-900 text-white p-3 text-xs flex justify-between items-center px-4 shrink-0">
+        <div class="flex gap-4 items-center">
+            <span class="font-bold text-yellow-400">开发模式：</span>
+            <label class="flex items-center gap-2 cursor-pointer hover:text-white text-gray-300">
+                <input type="radio" name="group" value="group1" onchange="switchGroup('group1')">
+                组别 1（基础概念，限制 2 次）
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer hover:text-white text-gray-300">
+                <input type="radio" name="group" value="group2" checked onchange="switchGroup('group2')">
+                组别 2（深度探索，目标 6 轮）
+            </label>
+        </div>
+        <button onclick="resetExperiment()" class="hover:text-yellow-400 underline">
+            重置 / 重启
+        </button>
+    </div>
+
+    <!-- 主内容区 -->
+    <div class="flex flex-1 overflow-hidden" id="main-container">
+        
+        <!-- 左侧面板：Prompt选择区 -->
+        <div id="left-panel" 
+             class="bg-white border-r border-gray-200 flex flex-col" 
+             style="width: 33.333%; min-width: 320px; max-width: 70%;">
+            <div class="p-6 border-b border-gray-100 bg-slate-50">
+                <div class="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">
+                    今日主题
+                </div>
+                <h2 class="text-xl font-bold text-slate-800">C++ 指针与内存</h2>
+            </div>
+
+            <div id="prompt-container" class="flex-1 overflow-y-auto p-6 space-y-6">
+                <!-- Prompt按钮将动态插入这里 -->
+            </div>
+            
+            <!-- 已掌握的概念墙 -->
+            <div id="concept-wall-container" class="border-t border-gray-200 bg-gradient-to-b from-slate-50 to-white p-4 shrink-0">
+                <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
+                    已掌握的概念墙
+                </div>
+                <div id="concept-wall-list" class="flex flex-wrap gap-2">
+                    <!-- 已掌握的概念将显示在这里 -->
+                </div>
+            </div>
+            
+            <!-- 选中的关键词区域 -->
+            <div id="selected-keywords-container" class="border-t border-gray-200 bg-slate-50 p-4 shrink-0">
+                <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                    已关注的关键词
+                </div>
+                <div id="selected-keywords-list" class="flex flex-wrap gap-2">
+                    <!-- 选中的关键词将显示在这里 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 可拖动分隔条 -->
+        <div class="resizer" id="resizer" onmousedown="startResize(event)"></div>
+
+        <!-- 右侧面板：聊天区 -->
+        <div id="right-panel" class="flex flex-col bg-white relative" style="flex: 1; min-width: 400px;">
+            
+            <!-- 顶部状态栏 -->
+            <div class="h-16 border-b border-gray-100 flex items-center justify-between px-6 bg-white shadow-sm z-10 shrink-0">
+                <div class="flex items-center gap-2">
+                    <div id="ai-status-dot" 
+                         class="w-2 h-2 rounded-full bg-gray-300 transition-colors duration-300">
+                    </div>
+                    <span class="text-sm font-medium text-gray-500">AI 导师</span>
+                </div>
+
+                <div id="progress-area" class="w-1/3">
+                    <!-- 进度条将动态插入这里 -->
+                    </div>
+            </div>
+
+            <!-- 聊天消息区 -->
+            <div id="chat-messages" 
+                 class="flex-1 overflow-y-auto p-6 space-y-6 bg-gray-50 scroll-smooth">
+                <!-- 消息将动态插入这里 -->
+                </div>
+
+            <!-- 输入区 -->
+            <div class="p-6 bg-white border-t border-gray-100 shrink-0 relative">
+                <div id="tip-box" 
+                     style="display: none; position: absolute; bottom: calc(100% + 8px); left: 24px; z-index: 50;"
+                     class="text-xs bg-yellow-100 text-yellow-800 px-3 py-1 rounded border border-yellow-200 shadow-md">
+                    💡 Tip: 请将 [] 替换为你关心的变量或场景。
+                </div>
+
+                <div class="relative">
+                    <input type="text" 
+                           id="user-input" 
+                        class="w-full bg-gray-50 border border-gray-200 rounded-xl py-4 pl-4 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-50 disabled:bg-gray-100"
+                        placeholder="从左侧选择一个提示，或直接输入问题..."
+                        onkeydown="if(event.key === 'Enter') sendMessage()">
+                    
+                    <button id="send-btn" 
+                            onclick="sendMessage()" 
+                        class="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-30 transition-all">
+                        <i data-lucide="send" width="18" height="18"></i>
+                    </button>
+                </div>
+                
+                <div class="text-center mt-2">
+                    <span class="text-xs text-gray-400" id="footer-status">
+                        AI 教学助手 v1.0
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript模块 -->
+    <script src="js/config.js"></script>
+    <script src="js/state.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/resizer.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/messages.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

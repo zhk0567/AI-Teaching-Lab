@@ -1,0 +1,19 @@
+{
+  "name": "ai-teaching-experiment",
+  "version": "1.0.0",
+  "description": "AI教学实验系统后端服务器",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "ai",
+    "teaching",
+    "experiment"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {}
+}
+
