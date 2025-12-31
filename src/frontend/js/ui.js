@@ -35,11 +35,13 @@ const UI = {
      * @private
      */
     _renderGroup1Progress(container) {
+        // 优先使用管理员设置的 completed 状态
+        const isDone = AppState.completed || AppState.isGroup1LimitReached();
         const remaining = Math.max(0, GROUP_CONFIG.GROUP1.MAX_TURNS - AppState.turnCount);
-        const colorClass = remaining === 0
+        const colorClass = isDone
             ? 'bg-red-100 text-red-600'
             : 'bg-green-100 text-green-700';
-        const text = remaining === 0
+        const text = isDone
             ? '今日额度已用完'
             : `剩余: ${remaining} / ${GROUP_CONFIG.GROUP1.MAX_TURNS}`;
 
@@ -57,10 +59,11 @@ const UI = {
      * @private
      */
     _renderGroup2Progress(container) {
+        // 优先使用管理员设置的 completed 状态
+        const isDone = AppState.completed || AppState.isGroup2TargetReached();
         // 限制进度条不超过100%，防止超出轮数
         const actualTurnCount = Math.min(AppState.turnCount, GROUP_CONFIG.GROUP2.TARGET_TURNS);
         const percent = Math.min(100, (actualTurnCount / GROUP_CONFIG.GROUP2.TARGET_TURNS) * 100);
-        const isDone = AppState.isGroup2TargetReached();
         const color = isDone ? 'bg-green-500' : 'bg-blue-500';
         const statusText = isDone ? '目标达成！' : '研究深度';
         const progressText = this._getProgressText(isDone);
@@ -88,9 +91,7 @@ const UI = {
             const displayCount = Math.min(AppState.turnCount, GROUP_CONFIG.GROUP2.TARGET_TURNS);
             return `目标达成！(${displayCount}/${GROUP_CONFIG.GROUP2.TARGET_TURNS})`;
         }
-        if (AppState.turnCount === 0) {
-            return '准备开始';
-        }
+        // 即使初始状态（turnCount = 0），也显示轮数比
         const remaining = GROUP_CONFIG.GROUP2.TARGET_TURNS - AppState.turnCount;
         return remaining > 0
             ? `当前进度: 第${AppState.turnCount}/${GROUP_CONFIG.GROUP2.TARGET_TURNS}轮，加油，还需${remaining}轮`
@@ -135,7 +136,6 @@ const UI = {
      */
     _renderStartPrompt(container) {
         container.innerHTML = `
-            <div class="text-sm font-semibold text-gray-400 mb-3">步骤 1：初始化</div>
             <button onclick="fillPrompt('${PROMPTS.start.text}')" 
                 class="w-full text-left p-4 rounded-xl border-2 border-blue-100 bg-blue-50 
                        hover:border-blue-500 hover:shadow-md transition-all group">

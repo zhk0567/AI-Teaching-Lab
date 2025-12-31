@@ -36,6 +36,8 @@ def check_nodejs():
             ['node', '--version'],
             capture_output=True,
             text=True,
+            encoding='utf-8',
+            errors='replace',
             timeout=PORT_CHECK_TIMEOUT
         )
         if result.returncode == 0:
@@ -88,11 +90,14 @@ def start_backend():
             'backend'
         )
         backend_script_name = os.path.basename(BACKEND_SCRIPT)
+        # 不重定向输出，让服务器日志直接显示在终端
         process = subprocess.Popen(
             ['node', backend_script_name],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=None,  # 直接输出到终端
+            stderr=None,  # 直接输出到终端
             text=True,
+            encoding='utf-8',
+            errors='replace',
             cwd=backend_dir
         )
 
@@ -100,12 +105,13 @@ def start_backend():
 
         if process.poll() is None:
             print(f"✓ 后端服务器已启动 (PID: {process.pid})")
+            print("  服务器日志将直接显示在下方")
+            print()
             return process
         else:
-            stdout, stderr = process.communicate()
+            # 进程已退出，说明启动失败
             print("✗ 后端服务器启动失败")
-            if stderr:
-                print(f"  错误信息: {stderr}")
+            print("  请查看上方的错误信息")
             return None
 
     except Exception as e:

@@ -16,28 +16,225 @@
     <!-- 顶部导航栏 -->
     <div class="bg-slate-900 text-white p-3 text-xs flex justify-between items-center px-4 shrink-0">
         <div class="flex gap-4 items-center">
-            <span class="font-bold text-yellow-400">开发模式：</span>
-            <label class="flex items-center gap-2 cursor-pointer hover:text-white text-gray-300">
-                <input type="radio" name="group" value="group1" onchange="switchGroup('group1')">
-                组别 1（基础概念，限制 2 次）
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer hover:text-white text-gray-300">
-                <input type="radio" name="group" value="group2" checked onchange="switchGroup('group2')">
-                组别 2（深度探索，目标 6 轮）
-            </label>
+            <span class="font-bold text-yellow-400" id="user-group-label">组别：</span>
+            <span id="current-user-info" class="text-gray-300">加载中...</span>
         </div>
-        <button onclick="resetExperiment()" class="hover:text-yellow-400 underline">
-            重置 / 重启
-        </button>
+        <div class="flex gap-4 items-center">
+            <button onclick="resetExperiment()" class="hover:text-yellow-400 underline">
+                重置 / 重启
+            </button>
+            <button onclick="logout()" class="hover:text-red-400 underline">
+                退出登录
+            </button>
+        </div>
+    </div>
+
+    <!-- 账号信息弹窗 -->
+    <div id="account-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-5xl mx-4" style="max-height: 85vh; overflow: hidden; display: flex; flex-direction: column;">
+            <div class="flex justify-between items-center mb-4 shrink-0">
+                <h2 class="text-xl font-bold text-gray-800">账号信息</h2>
+                <button onclick="closeAccountModal()" class="text-gray-400 hover:text-gray-600">
+                    <i data-lucide="x" width="20" height="20"></i>
+                </button>
+            </div>
+            
+            <div class="flex flex-row gap-4 flex-1 min-h-0 overflow-hidden">
+                <!-- 左侧：用户信息、日历、状态 -->
+                <div class="flex-1 min-w-0 flex flex-col overflow-hidden">
+                    <!-- 用户信息 -->
+                    <div class="mb-3 p-3 bg-gray-50 rounded-lg shrink-0">
+                        <div class="flex items-center gap-2">
+                            <div class="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center shrink-0">
+                                <i data-lucide="user" width="20" height="20" class="text-white"></i>
+                            </div>
+                            <div class="min-w-0">
+                                <div class="font-semibold text-sm text-gray-800 truncate" id="account-username">加载中...</div>
+                                <div class="text-xs text-gray-500 truncate" id="account-group">加载中...</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 日历 -->
+                    <div class="mb-3 flex-1 min-h-0 flex flex-col">
+                        <div class="flex items-center justify-between mb-2 shrink-0">
+                            <h3 class="text-sm font-semibold text-gray-800">学习日历</h3>
+                            <div class="flex items-center gap-2">
+                                <button id="calendar-prev-month" class="p-1 hover:bg-gray-100 rounded transition-colors" title="上一个月">
+                                    <i data-lucide="chevron-left" width="16" height="16"></i>
+                                </button>
+                                <span id="calendar-month-year" class="text-sm font-medium text-gray-700 min-w-[100px] text-center">2024年12月</span>
+                                <button id="calendar-next-month" class="p-1 hover:bg-gray-100 rounded transition-colors" title="下一个月">
+                                    <i data-lucide="chevron-right" width="16" height="16"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="calendar-container" class="grid grid-cols-7 gap-0.5 flex-1 min-h-0 overflow-y-auto">
+                            <!-- 日历将动态生成 -->
+                        </div>
+                    </div>
+                    
+                    <!-- 今日状态 -->
+                    <div class="p-3 bg-blue-50 rounded-lg border border-blue-200 shrink-0 mb-3">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <div class="text-xs text-gray-600">今日状态</div>
+                                <div class="font-semibold text-sm text-gray-800" id="today-status">加载中...</div>
+                            </div>
+                            <div id="today-badge" class="px-2 py-1 rounded-full text-xs font-semibold">
+                                <!-- 状态徽章 -->
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex gap-2 shrink-0">
+                        <button onclick="closeAccountModal()" 
+                                class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                            关闭
+                        </button>
+                        <button onclick="logout()" 
+                                class="flex-1 px-3 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+                            退出登录
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 右侧：概念墙和关键词 -->
+                <div class="w-72 flex-shrink-0 border-l border-gray-200 pl-4 flex flex-col overflow-y-auto">
+                    <!-- 已掌握的概念墙 -->
+                    <div class="mb-4 shrink-0">
+                        <h3 class="text-sm font-semibold text-gray-800 mb-2">已掌握的概念墙</h3>
+                        <div id="concept-wall-container">
+                            <div id="concept-wall-list" class="flex flex-wrap gap-1.5">
+                                <!-- 已掌握的概念将显示在这里 -->
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 已关注的关键词 -->
+                    <div class="mb-4 shrink-0">
+                        <h3 class="text-sm font-semibold text-gray-800 mb-2">已关注的关键词</h3>
+                        <div id="selected-keywords-container">
+                            <div id="selected-keywords-list" class="flex flex-wrap gap-1.5">
+                                <!-- 选中的关键词将显示在这里 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 登录弹窗 -->
+    <div id="login-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md mx-4 transform scale-95 transition-transform duration-300">
+            <div class="text-center mb-8">
+                <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4">
+                    <i data-lucide="graduation-cap" width="32" height="32" class="text-white"></i>
+                </div>
+                <h2 class="text-3xl font-bold text-gray-800 mb-2">AI教学实验系统</h2>
+                <p class="text-gray-600">请登录以继续使用</p>
+            </div>
+
+            <form id="login-form" class="space-y-6">
+                <div>
+                    <label for="login-username" class="block text-sm font-medium text-gray-700 mb-2">
+                        用户名
+                    </label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i data-lucide="user" width="20" height="20" class="text-gray-400"></i>
+                        </div>
+                        <input type="text" 
+                               id="login-username" 
+                               name="username"
+                               required
+                               class="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg 
+                                      focus:ring-2 focus:ring-blue-500 focus:border-blue-500 
+                                      transition-all outline-none"
+                               placeholder="请输入用户名">
+                    </div>
+                </div>
+
+                <div>
+                    <label for="login-password" class="block text-sm font-medium text-gray-700 mb-2">
+                        密码
+                    </label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i data-lucide="lock" width="20" height="20" class="text-gray-400"></i>
+                        </div>
+                        <input type="password" 
+                               id="login-password" 
+                               name="password"
+                               required
+                               class="block w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg 
+                                      focus:ring-2 focus:ring-blue-500 focus:border-blue-500 
+                                      transition-all outline-none"
+                               placeholder="请输入密码"
+                               onkeydown="if(event.key === 'Enter') document.getElementById('login-form').dispatchEvent(new Event('submit'))">
+                        <button type="button" 
+                                id="toggle-password-btn"
+                                onclick="togglePasswordVisibility()"
+                                class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+                                title="显示/隐藏密码">
+                            <i data-lucide="eye" width="20" height="20" id="password-eye-icon"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="login-error-message" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                </div>
+
+                <button type="submit" 
+                        id="login-btn"
+                        class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold 
+                               hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 
+                               focus:ring-offset-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span id="login-btn-text">登录</span>
+                    <span id="login-btn-loading" class="hidden">登录中...</span>
+                </button>
+            </form>
+
+            <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+                <p class="text-xs text-gray-600 mb-3 font-semibold">测试账号（点击快速填充）：</p>
+                <div class="space-y-2">
+                    <button type="button" 
+                            onclick="fillTestAccount('group1_user1', '123')"
+                            class="w-full text-left px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors">
+                        <div class="flex items-center justify-between">
+                            <span><strong>组别1用户：</strong> group1_user1 / 123</span>
+                            <i data-lucide="arrow-right" width="14" height="14" class="text-gray-400"></i>
+                        </div>
+                    </button>
+                    <button type="button" 
+                            onclick="fillTestAccount('group2_user1', '123')"
+                            class="w-full text-left px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors">
+                        <div class="flex items-center justify-between">
+                            <span><strong>组别2用户：</strong> group2_user1 / 123</span>
+                            <i data-lucide="arrow-right" width="14" height="14" class="text-gray-400"></i>
+                        </div>
+                    </button>
+                    <button type="button" 
+                            onclick="fillTestAccount('admin', 'admin123')"
+                            class="w-full text-left px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors">
+                        <div class="flex items-center justify-between">
+                            <span><strong>管理员：</strong> admin / admin123</span>
+                            <i data-lucide="arrow-right" width="14" height="14" class="text-gray-400"></i>
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- 主内容区 -->
-    <div class="flex flex-1 overflow-hidden" id="main-container">
+    <div class="flex flex-1 overflow-hidden" id="main-container" style="pointer-events: none; opacity: 0.3;">
         
         <!-- 左侧面板：Prompt选择区 -->
         <div id="left-panel" 
              class="bg-white border-r border-gray-200 flex flex-col" 
-             style="width: 33.333%; min-width: 320px; max-width: 70%;">
+             style="width: 33.333%; min-width: 280px; max-width: 65%;">
             <div class="p-6 border-b border-gray-100 bg-slate-50">
                 <div class="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">
                     今日主题
@@ -49,24 +246,13 @@
                 <!-- Prompt按钮将动态插入这里 -->
             </div>
             
-            <!-- 已掌握的概念墙 -->
-            <div id="concept-wall-container" class="border-t border-gray-200 bg-gradient-to-b from-slate-50 to-white p-4 shrink-0">
-                <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
-                    已掌握的概念墙
-                </div>
-                <div id="concept-wall-list" class="flex flex-wrap gap-2">
-                    <!-- 已掌握的概念将显示在这里 -->
-                </div>
-            </div>
-            
-            <!-- 选中的关键词区域 -->
-            <div id="selected-keywords-container" class="border-t border-gray-200 bg-slate-50 p-4 shrink-0">
-                <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                    已关注的关键词
-                </div>
-                <div id="selected-keywords-list" class="flex flex-wrap gap-2">
-                    <!-- 选中的关键词将显示在这里 -->
-                </div>
+            <!-- 账号入口按钮 -->
+            <div class="border-t border-gray-200 bg-slate-50 p-4 shrink-0">
+                <button onclick="showAccountModal()" 
+                        class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold">
+                    <i data-lucide="user" width="18" height="18"></i>
+                    <span>账号信息</span>
+                </button>
             </div>
         </div>
 
@@ -74,8 +260,7 @@
         <div class="resizer" id="resizer" onmousedown="startResize(event)"></div>
 
         <!-- 右侧面板：聊天区 -->
-        <div id="right-panel" class="flex flex-col bg-white relative" style="flex: 1; min-width: 400px;">
-            
+        <div id="right-panel" class="flex flex-col flex-1" style="min-width: 400px; overflow: hidden;">
             <!-- 顶部状态栏 -->
             <div class="h-16 border-b border-gray-100 flex items-center justify-between px-6 bg-white shadow-sm z-10 shrink-0">
                 <div class="flex items-center gap-2">
@@ -98,43 +283,77 @@
 
             <!-- 输入区 -->
             <div class="p-6 bg-white border-t border-gray-100 shrink-0 relative">
-                <div id="tip-box" 
-                     style="display: none; position: absolute; bottom: calc(100% + 8px); left: 24px; z-index: 50;"
-                     class="text-xs bg-yellow-100 text-yellow-800 px-3 py-1 rounded border border-yellow-200 shadow-md">
-                    💡 Tip: 请将 [] 替换为你关心的变量或场景。
-                </div>
-
-                <div class="relative">
-                    <input type="text" 
-                           id="user-input" 
-                        class="w-full bg-gray-50 border border-gray-200 rounded-xl py-4 pl-4 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-50 disabled:bg-gray-100"
-                        placeholder="从左侧选择一个提示，或直接输入问题..."
-                        onkeydown="if(event.key === 'Enter') sendMessage()">
-                    
-                    <button id="send-btn" 
-                            onclick="sendMessage()" 
-                        class="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-30 transition-all">
-                        <i data-lucide="send" width="18" height="18"></i>
-                    </button>
-                </div>
-                
-                <div class="text-center mt-2">
-                    <span class="text-xs text-gray-400" id="footer-status">
-                        AI 教学助手 v1.0
-                    </span>
-                </div>
+            <div id="tip-box" 
+                 style="display: none; position: absolute; bottom: calc(100% + 8px); left: 24px; z-index: 50;"
+                 class="text-xs bg-yellow-100 text-yellow-800 px-3 py-1 rounded border border-yellow-200 shadow-md">
+                💡 Tip: 请将 [] 替换为你关心的变量或场景。
             </div>
+
+            <div class="relative">
+                <input type="text" 
+                       id="user-input" 
+                    class="w-full bg-gray-50 border border-gray-200 rounded-xl py-4 pl-4 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-50 disabled:bg-gray-100"
+                    placeholder="从左侧选择一个提示，或直接输入问题..."
+                    onkeydown="if(event.key === 'Enter') sendMessage()">
+                
+                <button id="send-btn" 
+                        onclick="sendMessage()" 
+                    class="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-30 transition-all">
+                    <i data-lucide="send" width="18" height="18"></i>
+                </button>
+            </div>
+            
+            <div class="text-center mt-2">
+                <span class="text-xs text-gray-400" id="footer-status">
+                    AI 教学助手 v1.0
+                </span>
+            </div>
+        </div>
         </div>
     </div>
 
     <!-- JavaScript模块 -->
     <script src="js/config.js"></script>
+    <script src="js/storage.js"></script>
+    
+    <!-- 应用模块 -->
     <script src="js/state.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/resizer.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/messages.js"></script>
     <script src="js/api.js"></script>
+    <script src="js/mechanisms.js"></script>
+    <script src="js/experiment.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/accountModal.js"></script>
     <script src="js/main.js"></script>
+    <script>
+        // 一键填充测试账号
+        function fillTestAccount(username, password) {
+            const usernameInput = document.getElementById('login-username');
+            const passwordInput = document.getElementById('login-password');
+            
+            if (usernameInput && passwordInput) {
+                usernameInput.value = username;
+                passwordInput.value = password;
+                
+                // 聚焦到密码输入框，方便直接按回车登录
+                passwordInput.focus();
+                
+                // 重新初始化图标（确保箭头图标显示）
+                if (typeof lucide !== 'undefined') {
+                    lucide.createIcons();
+                }
+            }
+        }
+        
+        // 初始化图标（在登录弹窗显示后）
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                lucide.createIcons();
+            }, 200);
+        });
+    </script>
 </body>
 </html>

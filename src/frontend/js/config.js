@@ -50,7 +50,10 @@ const PROMPTS = {
 
 // 占位符验证配置
 const PLACEHOLDER_CONFIG = {
-    MIN_LEFT_PANEL_WIDTH: 320,
-    MAX_LEFT_PANEL_WIDTH_RATIO: 0.7
+    MIN_LEFT_PANEL_WIDTH: 280,           // 最小宽度：280px（允许左侧面板更窄）
+    MAX_LEFT_PANEL_WIDTH_RATIO: 0.65,    // 最大宽度比例：65%（允许左侧面板更宽）
+    MIN_LEFT_PANEL_WIDTH_RATIO: 0.2,     // 最小宽度比例：20%（基于容器宽度）
+    MIN_RIGHT_PANEL_WIDTH: 500,          // 右侧面板最小宽度：500px（限制右侧面板不能太窄）
+    MIN_RIGHT_PANEL_WIDTH_RATIO: 0.35    // 右侧面板最小宽度比例：35%（基于容器宽度）
 };
 

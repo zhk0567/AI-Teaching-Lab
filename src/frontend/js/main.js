@@ -4,14 +4,221 @@
  */
 
 const Main = {
+    progressRefreshInterval: null,
+    isInitializing: false,  // 初始化锁，防止重复初始化
+    isInitialized: false,   // 初始化完成标志
+    
     /**
-     * 初始化应用
+     * 初始化应用（带锁机制，防止重复初始化）
      */
-    init() {
-        lucide.createIcons();
-        Resizer.init();
-        this.resetExperiment();
-        this._setupInputListener();
+    async init() {
+        // 如果正在初始化，直接返回
+        if (this.isInitializing) {
+            console.warn('初始化正在进行中，跳过重复调用');
+            return;
+        }
+        
+        // 如果已经初始化，只更新UI，不重新初始化
+        if (this.isInitialized) {
+            console.log('应用已初始化，仅更新UI');
+            this._updateUserInfoDisplay();
+            if (typeof UI !== 'undefined' && UI.update) {
+                UI.update();
+            }
+            return;
+        }
+        
+        this.isInitializing = true;
+        
+        try {
+            console.log('开始初始化应用...');
+            
+            // 首先清理可能残留的状态，避免卡住
+            AppState.isAiTyping = false;
+            AppState.isInputLocked = false;
+            AppState.showHighlightTask = false;
+            AppState.waitingForView = false;
+            AppState.currentAiMessageElement = null;
+            if (typeof Messages !== 'undefined' && Messages.removeTypingIndicator) {
+                Messages.removeTypingIndicator();
+            }
+            
+            // 初始化用户信息
+            AppState.initUserInfo();
+            
+            // 确保初始状态为0（在加载进度之前）
+            AppState.turnCount = 0;
+            AppState.completed = false;
+            
+            // 更新用户信息显示（先显示为0，不等待进度加载）
+            this._updateUserInfoDisplay();
+            if (typeof UI !== 'undefined' && UI.update) {
+                UI.update();
+            }
+            
+            // 初始化UI组件（同步操作，立即完成）
+            try {
+                if (typeof lucide !== 'undefined') {
+                    lucide.createIcons();
+                }
+            } catch (e) {
+                console.warn('初始化图标失败:', e.message);
+            }
+            
+            try {
+                if (typeof Resizer !== 'undefined' && Resizer.init) {
+                    Resizer.init();
+                }
+            } catch (e) {
+                console.warn('初始化Resizer失败:', e.message);
+            }
+            
+            // 先设置输入监听器，确保用户可以立即使用
+            this._setupInputListener();
+            
+            // 启用主内容区（确保用户可以立即看到界面）
+            const mainContainer = document.getElementById('main-container');
+            if (mainContainer) {
+                mainContainer.style.pointerEvents = 'auto';
+                mainContainer.style.opacity = '1';
+            }
+            
+            // 标记为已初始化（即使后续异步操作失败，也认为基本初始化完成）
+            this.isInitialized = true;
+            
+            // 异步加载用户进度，不阻塞初始化（添加超时保护）
+            AppState.loadProgress().catch(error => {
+                console.warn('加载进度失败，继续使用默认值:', error.message);
+            }).then(() => {
+                // 进度加载完成后，更新UI
+                this._updateUserInfoDisplay();
+                if (typeof UI !== 'undefined' && UI.update) {
+                    UI.update();
+                }
+            });
+            
+            // 异步重置实验（但不会覆盖已加载的进度），不阻塞初始化
+            // 确保欢迎消息被显示，即使重置失败
+            Experiment.reset().catch(error => {
+                console.warn('重置实验失败:', error.message);
+                // 即使重置失败，也尝试显示欢迎消息
+                const chatBox = Utils.getElement('chat-messages');
+                if (chatBox && chatBox.children.length === 0) {
+                    // 如果聊天框为空，手动添加欢迎消息
+                    const groupLabel = AppState.currentGroup === GROUP_CONFIG.GROUP1.NAME
+                        ? GROUP_CONFIG.GROUP1.LABEL
+                        : GROUP_CONFIG.GROUP2.LABEL;
+                    if (typeof Messages !== 'undefined' && Messages.append) {
+                        Messages.append('ai', 
+                            `欢迎来到实验系统。\n组别: ${groupLabel}。\n\n请从左侧选择一个提示开始。`, 
+                            true);
+                    }
+                }
+            });
+            
+            // 启动定期刷新进度（每30秒刷新一次，确保管理员设置后能及时更新）
+            this.startProgressRefresh();
+            
+            console.log('应用初始化完成');
+        } catch (error) {
+            console.error('初始化失败:', error);
+            // 即使出错也更新用户信息显示
+            this._updateUserInfoDisplay();
+            // 确保状态被清理
+            AppState.isAiTyping = false;
+            if (typeof Messages !== 'undefined' && Messages.removeTypingIndicator) {
+                Messages.removeTypingIndicator();
+            }
+            // 标记为已初始化，允许后续操作
+            this.isInitialized = true;
+        } finally {
+            this.isInitializing = false;
+        }
+    },
+    
+    /**
+     * 启动定期刷新进度
+     */
+    startProgressRefresh() {
+        // 清除之前的定时器（如果存在）
+        if (this.progressRefreshInterval) {
+            clearInterval(this.progressRefreshInterval);
+            this.progressRefreshInterval = null;
+        }
+        
+        // 每30秒刷新一次进度（添加防抖，避免重复调用）
+        let isRefreshing = false;
+        this.progressRefreshInterval = setInterval(async () => {
+            // 如果正在刷新，跳过本次
+            if (isRefreshing) {
+                console.warn('进度刷新正在进行中，跳过本次');
+                return;
+            }
+            
+            isRefreshing = true;
+            try {
+                await AppState.loadProgress();
+                // 更新用户信息显示（包括进度）
+                this._updateUserInfoDisplay();
+            } catch (error) {
+                console.error('定期刷新进度失败:', error);
+                // 失败不影响使用，继续运行
+            } finally {
+                isRefreshing = false;
+            }
+        }, 30000); // 30秒
+    },
+    
+    /**
+     * 停止定期刷新进度
+     */
+    stopProgressRefresh() {
+        if (this.progressRefreshInterval) {
+            clearInterval(this.progressRefreshInterval);
+            this.progressRefreshInterval = null;
+        }
+    },
+
+    /**
+     * 更新用户信息显示
+     * @private
+     */
+    _updateUserInfoDisplay() {
+        const userInfoElement = Utils.getElement('current-user-info');
+        if (userInfoElement) {
+            if (AppState.userInfo && AppState.userInfo.username) {
+                // 严格验证：确保 group 字段存在
+                if (!AppState.userInfo.group) {
+                    console.error('严重错误：AppState.userInfo 缺少 group 字段！', AppState.userInfo);
+                    userInfoElement.textContent = `${AppState.userInfo.username} - 未知组别`;
+                } else {
+                    const groupLabel = AppState.userInfo.group === GROUP_CONFIG.GROUP1.NAME
+                        ? GROUP_CONFIG.GROUP1.LABEL
+                        : GROUP_CONFIG.GROUP2.LABEL;
+                    userInfoElement.textContent = `${AppState.userInfo.username} - ${groupLabel}`;
+                }
+            } else {
+                // 如果用户信息未加载，尝试从Storage获取
+                let userInfo = null;
+                if (typeof Storage !== 'undefined' && Storage.getUserInfo) {
+                    userInfo = Storage.getUserInfo();
+                }
+                if (userInfo && userInfo.username) {
+                    // 严格验证：确保 group 字段存在
+                    if (!userInfo.group) {
+                        console.error('严重错误：userInfo 缺少 group 字段！', userInfo);
+                        userInfoElement.textContent = `${userInfo.username} - 未知组别`;
+                    } else {
+                        const groupLabel = userInfo.group === GROUP_CONFIG.GROUP1.NAME
+                            ? GROUP_CONFIG.GROUP1.LABEL
+                            : GROUP_CONFIG.GROUP2.LABEL;
+                        userInfoElement.textContent = `${userInfo.username} - ${groupLabel}`;
+                    }
+                } else {
+                    userInfoElement.textContent = '未登录';
+                }
+            }
+        }
     },
 
     /**
@@ -52,42 +259,9 @@ const Main = {
      * 切换实验组别
      * @param {string} group - 组别名称
      */
-    switchGroup(group) {
+    async switchGroup(group) {
         AppState.switchGroup(group);
-        this.resetExperiment();
-    },
-
-    /**
-     * 重置实验
-     */
-    resetExperiment() {
-        AppState.reset();
-
-        const chatBox = Utils.getElement('chat-messages');
-        if (chatBox) {
-            chatBox.innerHTML = '';
-        }
-
-        // 隐藏提示框
-        const tip = Utils.getElement('tip-box');
-        if (tip) {
-            tip.style.display = 'none';
-        }
-
-        // 清空输入框
-        const input = Utils.getElement('user-input');
-        if (input) {
-            input.value = '';
-        }
-
-        const groupLabel = AppState.currentGroup === GROUP_CONFIG.GROUP1.NAME
-            ? GROUP_CONFIG.GROUP1.LABEL
-            : GROUP_CONFIG.GROUP2.LABEL;
-
-        Messages.append('ai', 
-            `欢迎来到实验系统。\n组别: ${groupLabel}。\n\n请从左侧选择一个提示开始。`);
-
-        UI.update();
+        await Experiment.reset();
     },
 
     /**
@@ -95,13 +269,14 @@ const Main = {
      * @param {string} text - Prompt文本
      */
     fillPrompt(text) {
-        // 检查是否已达到目标，禁止继续提问
-        if (AppState.isGroup2TargetReached()) {
-            alert('目标已达成！你已完成6轮深度探索，实验已完成。');
-            return;
-        }
-        if (AppState.isGroup1LimitReached()) {
-            alert('今日额度已用完，请整理笔记。');
+        // 检查是否已完成（优先使用管理员设置的状态）
+        const isDone = AppState.completed || AppState.isGroup2TargetReached() || AppState.isGroup1LimitReached();
+        if (isDone) {
+            if (AppState.currentGroup === GROUP_CONFIG.GROUP2.NAME) {
+                alert('目标已达成！你已完成6轮深度探索，实验已完成。');
+            } else {
+                alert('今日额度已用完，请整理笔记。');
+            }
             return;
         }
 
@@ -139,404 +314,29 @@ const Main = {
         }
     },
 
-    /**
-     * 启动查看锁定机制（机制A）
-     * @private
-     */
-    _startViewingLock() {
-        // 清除之前的计时器
-        AppState._clearViewTimer();
-        
-        // 获取最后一条AI消息
-        const chatBox = Utils.getElement('chat-messages');
-        if (!chatBox) {
-            return;
-        }
-
-        const aiMessages = chatBox.querySelectorAll('.flex.justify-start');
-        const lastAiMessage = aiMessages[aiMessages.length - 1];
-        
-        if (!lastAiMessage) {
-            return;
-        }
-
-        // 设置等待查看状态
-        AppState.waitingForView = true;
-        UI.update();
-
-        // 使用 Intersection Observer 检测消息是否在视口中
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    // 消息进入视口，开始计时
-                    if (!AppState.viewStartTime) {
-                        AppState.viewStartTime = Date.now();
-                    }
-
-                    // 检查是否已经停留足够时间（2-3秒）
-                    AppState.viewTimer = setInterval(() => {
-                        const elapsed = Date.now() - AppState.viewStartTime;
-                        const requiredTime = 2500; // 2.5秒
-
-                        if (elapsed >= requiredTime) {
-                            // 解锁按钮并显示动画
-                            this._unlockPrompts(lastAiMessage);
-                            observer.disconnect();
-                            AppState._clearViewTimer();
-                        }
-                    }, 100); // 每100ms检查一次
-                } else {
-                    // 消息离开视口，重置计时
-                    AppState.viewStartTime = null;
-                    if (AppState.viewTimer) {
-                        clearInterval(AppState.viewTimer);
-                        AppState.viewTimer = null;
-                    }
-                }
-            });
-        }, {
-            threshold: 0.3, // 至少30%在视口中
-            rootMargin: '0px'
-        });
-
-        observer.observe(lastAiMessage);
-
-        // 如果消息已经在视口中，立即开始计时
-        if (Utils.isElementPartiallyInViewport(lastAiMessage)) {
-            AppState.viewStartTime = Date.now();
-            AppState.viewTimer = setInterval(() => {
-                const elapsed = Date.now() - AppState.viewStartTime;
-                const requiredTime = 2500; // 2.5秒
-
-                if (elapsed >= requiredTime) {
-                    this._unlockPrompts(lastAiMessage);
-                    observer.disconnect();
-                    AppState._clearViewTimer();
-                }
-            }, 100);
-        }
-    },
-
-    /**
-     * 解锁Prompt按钮并显示动画
-     * @private
-     * @param {HTMLElement} messageElement - AI消息元素
-     */
-    _unlockPrompts(messageElement) {
-        // 防止重复调用
-        if (!AppState.waitingForView) {
-            return;
-        }
-        
-        AppState.waitingForView = false;
-        
-        // 添加解锁动画到消息
-        if (messageElement) {
-            const bubble = messageElement.querySelector('.bg-white');
-            if (bubble) {
-                bubble.classList.add('animate-pulse');
-                setTimeout(() => {
-                    bubble.classList.remove('animate-pulse');
-                }, 1000);
-            }
-        }
-
-        // 先显示解锁提示，再更新UI
-        const container = Utils.getElement('prompt-container');
-        if (container) {
-            // 检查是否已经存在解锁提示，避免重复添加
-            const existingNotice = container.querySelector('.unlock-notice');
-            if (existingNotice) {
-                return;
-            }
-            
-            const unlockNotice = Utils.createElement('div', 
-                'unlock-notice mt-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm animate-fade-in');
-            unlockNotice.innerHTML = `
-                <div class="flex items-center gap-2">
-                    <i data-lucide="unlock" width="16" height="16"></i>
-                    <span>已解锁，可以继续提问</span>
-                </div>`;
-            container.appendChild(unlockNotice);
-            lucide.createIcons();
-            
-            // 3秒后移除提示
-            setTimeout(() => {
-                if (unlockNotice.parentNode) {
-                    unlockNotice.style.opacity = '0';
-                    unlockNotice.style.transition = 'opacity 0.3s';
-                    setTimeout(() => {
-                        if (unlockNotice.parentNode) {
-                            unlockNotice.remove();
-                        }
-                    }, 300);
-                }
-            }, 3000);
-        }
-
-        // 更新UI以解锁按钮（在添加提示之后）
-        UI.update();
-    },
-
-        /**
-         * 检查是否应该触发高亮任务
-         * @private
-         * @returns {boolean}
-         */
-        _shouldTriggerHighlightTask() {
-            // 在Turn 3和Turn 5触发（turnCount从1开始，所以是turnCount === 3或5）
-            return AppState.turnCount === 3 || AppState.turnCount === 5;
-        },
-
-        /**
-         * 设置高亮任务
-         * @private
-         */
-        _setupHighlightTask() {
-            const chatBox = Utils.getElement('chat-messages');
-            if (!chatBox) {
-                return;
-            }
-
-            // 获取最后一条AI消息
-            const aiMessages = chatBox.querySelectorAll('.flex.justify-start');
-            const lastAiMessage = aiMessages[aiMessages.length - 1];
-            
-            if (!lastAiMessage) {
-                return;
-            }
-
-            const messageContent = lastAiMessage.querySelector('.ai-message-content');
-            if (!messageContent) {
-                return;
-            }
-
-            // 启用文本选择
-            messageContent.style.userSelect = 'text';
-            messageContent.style.cursor = 'text';
-            
-            // 添加选择事件监听
-            let selectionTimeout = null;
-            
-            messageContent.addEventListener('mouseup', () => {
-                const selection = window.getSelection();
-                const selectedText = selection.toString().trim();
-                
-                if (selectedText && selectedText.length > 0) {
-                    // 清除之前的定时器
-                    if (selectionTimeout) {
-                        clearTimeout(selectionTimeout);
-                    }
-                    
-                    // 延迟显示反馈，避免频繁触发
-                    selectionTimeout = setTimeout(() => {
-                        this._handleTextSelection(selectedText, lastAiMessage);
-                    }, 300);
-                }
-            });
-
-            // 添加点击事件（作为备选，但需要确保有选择文本）
-            // 注意：点击事件在mouseup之后触发，所以可以检查是否有选择
-            lastAiMessage.addEventListener('click', (e) => {
-                // 延迟检查，确保mouseup事件已经处理完
-                setTimeout(() => {
-                    const selection = window.getSelection();
-                    const selectedText = selection.toString().trim();
-                    
-                    // 只有在没有选择文本，且任务还未完成时，才允许通过点击解锁
-                    // 但不记录空信息
-                    if (!selectedText && AppState.showHighlightTask) {
-                        // 仅解锁，不记录关键词
-                        AppState.showHighlightTask = false;
-                        const bubble = lastAiMessage.querySelector('.bg-white');
-                        if (bubble) {
-                            bubble.style.backgroundColor = '#ecfdf5';
-                            bubble.style.borderColor = '#34d399';
-                            bubble.style.transition = 'all 0.3s';
-                        }
-                        UI.update();
-                    }
-                }, 100);
-            }, { once: true });
-        },
-
-        /**
-         * 处理文本选择
-         * @private
-         * @param {string} selectedText - 选中的文本
-         * @param {HTMLElement} messageElement - 消息元素
-         */
-        _handleTextSelection(selectedText, messageElement) {
-            // 确保不是空文本
-            if (!selectedText || !selectedText.trim()) {
-                return; // 不处理空文本
-            }
-            
-            const trimmedText = selectedText.trim();
-            
-            // 记录选择的内容（用于数据收集）
-            console.log('用户选择的内容:', trimmedText);
-            
-            // 添加到左侧关键词列表
-            this._addSelectedKeyword(trimmedText);
-            
-            // 高亮消息气泡（不添加反馈提示，避免上移）
-            const bubble = messageElement.querySelector('.bg-white');
-            if (bubble) {
-                bubble.style.backgroundColor = '#ecfdf5';
-                bubble.style.borderColor = '#34d399';
-                bubble.style.transition = 'all 0.3s';
-            }
-
-            // 解锁按钮
-            AppState.showHighlightTask = false;
-            UI.update();
-        },
-
-        /**
-         * 添加选中的关键词到左侧面板
-         * @private
-         * @param {string} keyword - 选中的关键词
-         */
-        _addSelectedKeyword(keyword) {
-            const container = Utils.getElement('selected-keywords-list');
-            if (!container) {
-                return;
-            }
-
-            // 检查是否已存在（避免重复）
-            const existingKeywords = Array.from(container.querySelectorAll('.keyword-tag'))
-                .map(tag => tag.textContent.trim());
-            
-            if (existingKeywords.includes(keyword)) {
-                return; // 已存在，不重复添加
-            }
-
-            // 创建关键词标签
-            const keywordTag = Utils.createElement('div', 
-                'keyword-tag inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium border border-green-200');
-            
-            keywordTag.innerHTML = `
-                <i data-lucide="check-circle" width="12" height="12"></i>
-                <span>${Utils.escapeHtml(keyword)}</span>`;
-            
-            container.appendChild(keywordTag);
-            lucide.createIcons();
-        },
-
-        /**
-         * 显示概念掌握奖励（机制C）
-         * @private
-         */
-        _showConceptMasteredReward() {
-            // 创建全屏遮罩
-            const overlay = Utils.createElement('div', 
-                'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center animate-fade-in');
-            
-            // 创建奖励卡片
-            const rewardCard = Utils.createElement('div', 
-                'bg-white rounded-2xl p-8 shadow-2xl max-w-md mx-4 transform scale-0 animate-scale-in');
-            
-            rewardCard.innerHTML = `
-                <div class="text-center">
-                    <div class="mb-4 flex justify-center">
-                        <div class="w-24 h-24 bg-gradient-to-br from-green-400 to-blue-500 rounded-full 
-                                    flex items-center justify-center animate-bounce">
-                            <i data-lucide="check-circle" width="48" height="48" class="text-white"></i>
-                        </div>
-                    </div>
-                    <h2 class="text-3xl font-bold text-gray-800 mb-2">Build Success</h2>
-                    <div class="mb-4">
-                        <span class="inline-block px-4 py-2 bg-green-100 text-green-800 rounded-full 
-                                     text-sm font-semibold animate-pulse">
-                            Concept Mastered
-                        </span>
-                    </div>
-                    <p class="text-gray-600 mb-6">
-                        恭喜！你已完成6轮深度探索，已掌握 C++ 指针概念！
-                    </p>
-                    <button onclick="this.closest('.fixed').remove()" 
-                            class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 
-                                   transition-colors font-semibold">
-                        继续学习
-                    </button>
-                </div>`;
-            
-            overlay.appendChild(rewardCard);
-            document.body.appendChild(overlay);
-            lucide.createIcons();
-            
-            // 添加缩放动画
-            setTimeout(() => {
-                rewardCard.style.transform = 'scale(1)';
-                rewardCard.style.transition = 'transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)';
-            }, 10);
-            
-            // 点击遮罩关闭
-            overlay.addEventListener('click', (e) => {
-                if (e.target === overlay) {
-                    overlay.style.opacity = '0';
-                    setTimeout(() => overlay.remove(), 300);
-                }
-            });
-            
-            // 3秒后自动关闭
-            setTimeout(() => {
-                overlay.style.opacity = '0';
-                setTimeout(() => overlay.remove(), 300);
-            }, 3000);
-        },
-
-        /**
-         * 点亮概念墙中的概念
-         * @private
-         * @param {string} conceptName - 概念名称
-         */
-        _lightUpConcept(conceptName) {
-            const container = Utils.getElement('concept-wall-list');
-            if (!container) {
-                return;
-            }
-
-            // 检查是否已存在
-            const existingConcepts = Array.from(container.querySelectorAll('.concept-badge'))
-                .map(badge => badge.dataset.concept);
-            
-            if (existingConcepts.includes(conceptName)) {
-                return; // 已存在，不重复添加
-            }
-
-            // 创建概念徽章
-            const conceptBadge = Utils.createElement('div', 
-                'concept-badge inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-400 to-blue-500 text-white rounded-lg text-sm font-bold shadow-md animate-pulse');
-            
-            conceptBadge.dataset.concept = conceptName;
-            conceptBadge.innerHTML = `
-                <i data-lucide="zap" width="16" height="16"></i>
-                <span>${Utils.escapeHtml(conceptName)}</span>`;
-            
-            container.appendChild(conceptBadge);
-            lucide.createIcons();
-            
-            // 添加点亮动画
-            setTimeout(() => {
-                conceptBadge.classList.remove('animate-pulse');
-                conceptBadge.classList.add('animate-fade-in');
-            }, 2000);
-        },
 
     /**
      * 发送消息
      */
     async sendMessage() {
-        // 检查是否已达到目标，禁止继续提问
-        if (AppState.isGroup2TargetReached()) {
-            alert('目标已达成！你已完成6轮深度探索，实验已完成。');
+        // 检查是否已完成（优先使用管理员设置的状态）
+        const isDone = AppState.completed || AppState.isGroup2TargetReached() || AppState.isGroup1LimitReached();
+        if (isDone) {
+            if (AppState.currentGroup === GROUP_CONFIG.GROUP2.NAME) {
+                alert('目标已达成！你已完成6轮深度探索，实验已完成。');
+            } else {
+                alert('今日额度已用完，请整理笔记。');
+            }
             return;
         }
-        if (AppState.isGroup1LimitReached()) {
-            alert('今日额度已用完，请整理笔记。');
-            return;
+
+        // 检查最后一条AI消息是否已验证
+        if (typeof Messages !== 'undefined' && Messages.isLastAiMessageVerified) {
+            const isVerified = Messages.isLastAiMessageVerified();
+            if (!isVerified) {
+                alert('请先验证上一条AI回复，然后才能继续提问。');
+                return;
+            }
         }
 
         const input = Utils.getElement('user-input');
@@ -598,6 +398,9 @@ const Main = {
 
             // 增加轮次（AI回复完成后）
             AppState.incrementTurn();
+            
+            // 保存进度
+            await AppState.saveProgress();
 
             // 显示操作按钮（复制和刷新）
             if (AppState.currentAiMessageElement) {
@@ -605,17 +408,17 @@ const Main = {
             }
 
             // 机制A: 启动等待查看消息的机制（打字机锁定）
-            this._startViewingLock();
+            Mechanisms.startViewingLock();
 
             // 机制B: 在特定轮次触发高亮任务（在查看解锁后）
             if (AppState.currentGroup === GROUP_CONFIG.GROUP2.NAME) {
-                const shouldTriggerHighlight = this._shouldTriggerHighlightTask();
+                const shouldTriggerHighlight = Mechanisms.shouldTriggerHighlightTask();
                 if (shouldTriggerHighlight) {
                     // 延迟触发，等待查看解锁完成
                     setTimeout(() => {
                         if (!AppState.waitingForView) {
                             AppState.showHighlightTask = true;
-                            this._setupHighlightTask();
+                            Mechanisms.setupHighlightTask();
                             UI.update();
                         }
                     }, 3500); // 3秒查看时间 + 0.5秒缓冲
@@ -626,25 +429,45 @@ const Main = {
             UI.update();
 
             // 机制C: 视觉奖励（完成6轮对话时）
+            // 延迟触发，等待查看解锁完成后再显示奖励
             if (AppState.isGroup2TargetReached()) {
-                // 点亮概念墙中的"Pointers"
-                this._lightUpConcept('Pointers');
-                // 显示奖励弹窗
-                this._showConceptMasteredReward();
+                console.log('机制C: 检测到完成6轮对话，准备显示奖励');
+                // 延迟触发，确保用户已经查看完消息
+                setTimeout(() => {
+                    console.log('机制C: 触发视觉奖励');
+                    // 点亮概念墙中的"Pointers"
+                    Mechanisms.lightUpConcept('Pointers');
+                    // 显示奖励弹窗
+                    Mechanisms.showConceptMasteredReward();
+                }, 4000); // 等待查看解锁完成（约3.5秒）+ 缓冲时间
             }
 
             AppState.currentAiMessageElement = null;
 
         } catch (error) {
             console.error('Error calling API:', error);
+            
+            // 确保状态被正确清理
             Messages.removeTypingIndicator();
             AppState.isAiTyping = false;
-
-            Messages.append('ai', 
-                '抱歉，发生了错误。请检查后端服务器是否正在运行（http://localhost:3000），或稍后重试。\n\n错误信息：' + error.message);
+            AppState.currentAiMessageElement = null;
+            
+            // 如果已经有部分响应，显示它；否则显示错误消息
+            if (AppState.currentAiMessageElement) {
+                // 如果消息容器已创建，显示错误
+                Messages.append('ai', 
+                    '抱歉，发生了错误。请检查后端服务器是否正在运行（http://localhost:3000），或稍后重试。\n\n错误信息：' + error.message);
+            } else {
+                Messages.append('ai', 
+                    '抱歉，发生了错误。请检查后端服务器是否正在运行（http://localhost:3000），或稍后重试。\n\n错误信息：' + error.message);
+            }
             
             // 错误时也增加轮次（因为已经发送了消息）
             AppState.incrementTurn();
+            // 保存进度（不等待完成，避免阻塞）
+            AppState.saveProgress().catch(e => {
+                console.warn('保存进度失败:', e.message);
+            });
             UI.update();
         }
     }
@@ -656,7 +479,7 @@ function switchGroup(group) {
 }
 
 function resetExperiment() {
-    Main.resetExperiment();
+    Experiment.reset();
 }
 
 function fillPrompt(text) {
@@ -667,8 +490,6 @@ function sendMessage() {
     Main.sendMessage();
 }
 
-// 初始化
-window.onload = function() {
-    Main.init();
-};
+// 初始化（由登录检查逻辑调用，不在这里自动初始化）
+// window.onload 中的初始化已移至登录检查逻辑中
 

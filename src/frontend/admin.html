@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理员面板 - AI教学实验系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-gray-50 min-h-screen font-sans text-slate-800">
+    <!-- 顶部导航栏 -->
+    <div class="bg-slate-900 text-white p-4 flex justify-between items-center">
+        <div class="flex items-center gap-4">
+            <h1 class="text-xl font-bold">管理员面板</h1>
+            <span id="admin-username" class="text-gray-300">加载中...</span>
+        </div>
+        <button onclick="logout()" class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors">
+            退出登录
+        </button>
+    </div>
+
+    <!-- 主内容区 -->
+    <div class="container mx-auto p-6 max-w-7xl">
+        <!-- 用户列表 -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold text-gray-800">用户管理</h2>
+                <button onclick="refreshUsers()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
+                    <i data-lucide="refresh-cw" width="18" height="18"></i>
+                    刷新
+                </button>
+            </div>
+            
+            <div id="error-message" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4"></div>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse">
+                    <thead>
+                        <tr class="bg-gray-100 border-b">
+                            <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">用户名</th>
+                            <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">组别</th>
+                            <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">当前进度</th>
+                            <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">完成状态</th>
+                            <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">额度设置</th>
+                            <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-table-body">
+                        <tr>
+                            <td colspan="6" class="px-4 py-8 text-center text-gray-500">
+                                <div class="flex items-center justify-center gap-2">
+                                    <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                                    <span>加载中...</span>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑用户弹窗 -->
+    <div id="edit-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md mx-4">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-2xl font-bold text-gray-800">编辑用户</h3>
+                <button onclick="closeEditModal()" class="text-gray-400 hover:text-gray-600">
+                    <i data-lucide="x" width="24" height="24"></i>
+                </button>
+            </div>
+            
+            <form id="edit-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">用户名</label>
+                    <input type="text" id="edit-username" readonly
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">组别</label>
+                    <input type="text" id="edit-group" readonly
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">当前轮次</label>
+                    <input type="number" id="edit-turnCount" min="0" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                
+                <div>
+                    <label class="flex items-center gap-2">
+                        <input type="checkbox" id="edit-completed" class="w-4 h-4 text-blue-600 rounded">
+                        <span class="text-sm font-medium text-gray-700">标记为已完成</span>
+                    </label>
+                </div>
+                
+                <div id="quota-section" class="space-y-3 border-t pt-4">
+                    <h4 class="font-semibold text-gray-700">额度设置</h4>
+                    <div id="group1-quota" class="hidden">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">最大轮次 (Group1)</label>
+                        <input type="number" id="edit-maxTurns" min="1"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div id="group2-quota" class="hidden">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">目标轮次 (Group2)</label>
+                        <input type="number" id="edit-targetTurns" min="1"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                </div>
+                
+                <div id="edit-error" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm"></div>
+                
+                <div class="flex gap-3 pt-4">
+                    <button type="button" onclick="closeEditModal()" 
+                            class="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                        取消
+                    </button>
+                    <button type="submit" 
+                            class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                        保存
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- JavaScript模块 -->
+    <script src="js/config.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/api.js"></script>
+    <script>
+        let currentEditUser = null;
+
+        // 检查登录状态
+        (function() {
+            const token = (typeof Storage !== 'undefined' && Storage.getAuthToken) 
+                ? Storage.getAuthToken() 
+                : localStorage.getItem('auth_token');
+            if (!token) {
+                window.location.href = 'cplus.html';
+                return;
+            }
+
+            // 验证token（添加超时保护，缩短到5秒）
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('验证超时，请检查后端服务器是否运行')), 5000)
+            );
+            
+            Promise.race([
+                fetch('http://localhost:3000/verify', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ token: token })
+                }),
+                timeoutPromise
+            ])
+            .then(res => {
+                if (!res || !res.ok) {
+                    throw new Error(`HTTP错误: ${res ? res.status : '无响应'}`);
+                }
+                return res.json();
+            })
+            .then(data => {
+                console.log('Token验证结果:', data);
+                if (!data.success) {
+                    console.error('Token验证失败');
+                    if (typeof Storage !== 'undefined' && Storage.clearAuth) {
+                        Storage.clearAuth();
+                    } else {
+                        localStorage.removeItem('auth_token');
+                        localStorage.removeItem('user_info');
+                    }
+                    window.location.href = 'cplus.html';
+                    return;
+                }
+                
+                if (!data.isAdmin) {
+                    console.error('用户不是管理员, isAdmin:', data.isAdmin);
+                    alert('您不是管理员，无法访问此页面。请使用管理员账号登录。');
+                    if (typeof Storage !== 'undefined' && Storage.clearAuth) {
+                        Storage.clearAuth();
+                    } else {
+                        localStorage.removeItem('auth_token');
+                        localStorage.removeItem('user_info');
+                    }
+                    window.location.href = 'cplus.html';
+                    return;
+                }
+                
+                console.log('管理员验证通过');
+                document.getElementById('admin-username').textContent = data.username;
+                loadUsers();
+            })
+            .catch((error) => {
+                console.error('Token验证错误:', error);
+                alert('验证失败: ' + error.message + '\n请检查后端服务器是否运行');
+                if (typeof Storage !== 'undefined' && Storage.clearAuth) {
+                    Storage.clearAuth();
+                } else {
+                    localStorage.removeItem('auth_token');
+                    localStorage.removeItem('user_info');
+                }
+                window.location.href = 'cplus.html';
+            });
+        })();
+
+        // 加载状态和请求控制
+        let isLoadingUsers = false;
+        let currentLoadAbortController = null;
+        
+        // 加载用户列表
+        async function loadUsers() {
+            // 如果正在加载，取消之前的请求
+            if (isLoadingUsers) {
+                console.log('[前端] 已有加载请求在进行，取消之前的请求');
+                if (currentLoadAbortController) {
+                    currentLoadAbortController.abort();
+                }
+            }
+            
+            // 创建新的 AbortController
+            currentLoadAbortController = new AbortController();
+            isLoadingUsers = true;
+            
+            // 显示加载状态
+            const tbody = document.getElementById('users-table-body');
+            if (tbody) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="px-4 py-8 text-center text-gray-500">
+                            <div class="flex items-center justify-center gap-2">
+                                <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                                <span>加载中...</span>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }
+            
+            try {
+                const users = await API.getUsers(currentLoadAbortController.signal);
+                
+                // 简单验证：确保是数组
+                if (!Array.isArray(users)) {
+                    throw new Error('服务器返回的数据格式错误');
+                }
+                
+                // 容错处理：补充缺失字段
+                users.forEach(user => {
+                    if (!user.username && user.student_id) {
+                        user.username = user.student_id;
+                    }
+                    if (!user.progress) {
+                        user.progress = { turnCount: 0, completed: false };
+                    }
+                });
+                
+                // 检查请求是否被取消
+                if (currentLoadAbortController?.signal.aborted) {
+                    console.log('[前端] 请求已被取消，忽略结果');
+                    return;
+                }
+                
+                renderUsers(users);
+            } catch (error) {
+                // 如果请求被取消，不显示错误
+                if (error.name === 'AbortError' || currentLoadAbortController?.signal.aborted) {
+                    console.log('[前端] 请求已被取消');
+                    return;
+                }
+                
+                console.error('加载用户列表失败:', error.message);
+                showError('加载用户列表失败: ' + error.message);
+                
+                // 如果是因为超时或网络错误，提供重试按钮
+                const tbody = document.getElementById('users-table-body');
+                if (error.message.includes('超时') || error.message.includes('网络') || error.message.includes('Failed to fetch') || error.message.includes('请求超时')) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="6" class="px-4 py-8 text-center">
+                                <div class="space-y-3">
+                                    <p class="text-red-600 font-semibold">${error.message}</p>
+                                    <p class="text-sm text-gray-500">请检查后端服务器是否运行（http://localhost:3000）</p>
+                                    <button onclick="loadUsers()" 
+                                            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                                        重试
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                } else {
+                    // 其他错误，显示错误信息
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="6" class="px-4 py-8 text-center">
+                                <div class="space-y-3">
+                                    <p class="text-red-600 font-semibold">加载失败</p>
+                                    <p class="text-sm text-gray-500">${error.message}</p>
+                                    <button onclick="loadUsers()" 
+                                            class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                                        重试
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }
+            } finally {
+                // 清除加载状态
+                isLoadingUsers = false;
+                currentLoadAbortController = null;
+            }
+        }
+
+        // 渲染用户列表
+        function renderUsers(users) {
+            const tbody = document.getElementById('users-table-body');
+            usersList = users || [];
+            
+            if (usersList.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">暂无用户</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = users.map((user) => {
+                // 容错处理：补充缺失字段
+                const username = user.username || user.student_id || '未知';
+                if (!user.progress) {
+                    user.progress = { turnCount: 0, completed: false };
+                }
+                
+                const progress = user.progress;
+                const turnCount = progress.turnCount || 0;
+                const maxTurns = user.maxTurns || (user.group === 'group1' ? 2 : null);
+                const targetTurns = user.targetTurns || (user.group === 'group2' ? 6 : null);
+                
+                // 判断完成状态：
+                // 1. 管理员手动设置的 completed 状态
+                // 2. 或者自动判断：group1达到maxTurns，group2达到targetTurns
+                let isCompleted = progress.completed || false;
+                if (!isCompleted) {
+                    if (user.group === 'group1' && maxTurns && turnCount >= maxTurns) {
+                        isCompleted = true;
+                    } else if (user.group === 'group2' && targetTurns && turnCount >= targetTurns) {
+                        isCompleted = true;
+                    }
+                }
+                
+                const progressText = user.group === 'group1' 
+                    ? `${turnCount} / ${maxTurns || 2}`
+                    : `${turnCount} / ${targetTurns || 6}`;
+                const completedBadge = isCompleted
+                    ? '<span class="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold">已完成</span>'
+                    : '<span class="px-2 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-semibold">进行中</span>';
+                
+                return `
+                    <tr class="border-b hover:bg-gray-50">
+                        <td class="px-4 py-3">${username}</td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
+                                ${user.group === 'group1' ? '组别1' : user.group === 'group2' ? '组别2' : '未知'}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3">${progressText}</td>
+                        <td class="px-4 py-3">${completedBadge}</td>
+                        <td class="px-4 py-3">
+                            ${user.group === 'group1' 
+                                ? `最大: ${user.maxTurns || 2} 轮`
+                                : `目标: ${user.targetTurns || 6} 轮`}
+                        </td>
+                        <td class="px-4 py-3">
+                            <div class="flex gap-2">
+                                <button onclick="editUser('${user.student_id || username}')" 
+                                        class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm">
+                                    编辑
+                                </button>
+                                <button onclick="resetUserStatus('${user.student_id || username}')" 
+                                        class="px-3 py-1 bg-orange-600 text-white rounded hover:bg-orange-700 transition-colors text-sm">
+                                    重置
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).filter(row => row !== '').join(''); // 过滤掉空行
+            
+            lucide.createIcons();
+        }
+
+        // 存储用户列表数据
+        let usersList = [];
+
+        // 编辑用户
+        function editUser(identifier) {
+            const user = usersList.find(u => u.username === identifier || u.student_id === identifier);
+            
+            if (!user) {
+                showError('无法找到用户数据，请刷新页面重试');
+                return;
+            }
+            
+            // 容错处理：补充缺失字段
+            if (!user.username && user.student_id) {
+                user.username = user.student_id;
+            }
+            if (!user.progress) {
+                user.progress = { turnCount: 0, completed: false };
+            }
+            if (!user.group) {
+                user.group = 'group1';
+            }
+            
+            // 保存当前编辑的用户
+            currentEditUser = user;
+            
+            // 填充表单
+            document.getElementById('edit-username').value = user.username;
+            document.getElementById('edit-group').value = user.group === 'group1' ? '组别1' : '组别2';
+            document.getElementById('edit-turnCount').value = user.progress.turnCount || 0;
+            document.getElementById('edit-completed').checked = user.progress.completed || false;
+            
+            // 显示/隐藏额度设置
+            const group1Quota = document.getElementById('group1-quota');
+            const group2Quota = document.getElementById('group2-quota');
+            const maxTurnsInput = document.getElementById('edit-maxTurns');
+            const targetTurnsInput = document.getElementById('edit-targetTurns');
+            
+            if (user.group === 'group1') {
+                group1Quota.classList.remove('hidden');
+                group2Quota.classList.add('hidden');
+                maxTurnsInput.value = user.maxTurns || 2;
+                // 设置 required 属性：显示时设为 required，隐藏时移除
+                maxTurnsInput.setAttribute('required', 'required');
+                targetTurnsInput.removeAttribute('required');
+            } else {
+                group1Quota.classList.add('hidden');
+                group2Quota.classList.remove('hidden');
+                targetTurnsInput.value = user.targetTurns || 6;
+                // 设置 required 属性：显示时设为 required，隐藏时移除
+                targetTurnsInput.setAttribute('required', 'required');
+                maxTurnsInput.removeAttribute('required');
+            }
+            
+            document.getElementById('edit-modal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        // 关闭编辑弹窗
+        function closeEditModal() {
+            document.getElementById('edit-modal').classList.add('hidden');
+            currentEditUser = null;
+            document.getElementById('edit-error').classList.add('hidden');
+            // 移除所有 required 属性，避免隐藏字段验证错误
+            document.getElementById('edit-maxTurns').removeAttribute('required');
+            document.getElementById('edit-targetTurns').removeAttribute('required');
+        }
+
+        // 重置用户状态
+        async function resetUserStatus(identifier) {
+            const user = usersList.find(u => u.username === identifier || u.student_id === identifier);
+            
+            if (!user) {
+                showError('无法找到用户数据，请刷新页面重试');
+                return;
+            }
+
+            const username = user.username || user.student_id;
+            
+            // 确认对话框
+            if (!confirm(`确定要重置用户 "${username}" 的状态吗？\n\n这将：\n- 将轮次重置为 0\n- 将完成状态重置为未完成\n- 清除今天的会话记录`)) {
+                return;
+            }
+
+            try {
+                const result = await API.resetUserStatus(username);
+                console.log('[前端] 重置用户状态成功:', result);
+                
+                // 显示成功消息
+                showSuccess(`用户 "${username}" 的状态已重置`);
+                
+                // 刷新用户列表
+                await loadUsers();
+            } catch (error) {
+                console.error('[前端] 重置用户状态失败:', error);
+                showError('重置状态失败: ' + error.message);
+            }
+        }
+
+        // 保存编辑
+        document.getElementById('edit-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const errorDiv = document.getElementById('edit-error');
+            errorDiv.classList.add('hidden');
+            
+            if (!currentEditUser) {
+                errorDiv.textContent = '错误：用户数据丢失，请刷新页面重试';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+            
+            // 容错处理
+            if (!currentEditUser.username && currentEditUser.student_id) {
+                currentEditUser.username = currentEditUser.student_id;
+            }
+            if (!currentEditUser.group) {
+                currentEditUser.group = 'group1';
+            }
+            
+            try {
+                const turnCountInput = document.getElementById('edit-turnCount').value;
+                const turnCount = parseInt(turnCountInput);
+                
+                // 验证 turnCount
+                if (isNaN(turnCount) || turnCount < 0) {
+                    throw new Error('轮次数量必须是大于等于0的整数');
+                }
+                
+                const completed = document.getElementById('edit-completed').checked;
+                
+                // 保存进度
+                console.log('[前端] 保存用户进度:', {
+                    username: currentEditUser.username,
+                    turnCount: turnCount,
+                    completed: completed,
+                    completedType: typeof completed
+                });
+                
+                const progressResult = await API.setUserProgress(currentEditUser.username, turnCount, completed);
+                console.log('[前端] 保存进度响应:', progressResult);
+                
+                // 保存额度
+                if (currentEditUser.group === 'group1') {
+                    const maxTurns = parseInt(document.getElementById('edit-maxTurns').value);
+                    if (isNaN(maxTurns) || maxTurns < 1) {
+                        throw new Error('最大轮次必须是大于0的整数');
+                    }
+                    console.log('[前端] 保存group1额度:', currentEditUser.username, 'maxTurns:', maxTurns);
+                    await API.setUserQuota(currentEditUser.username, maxTurns, undefined);
+                } else {
+                    const targetTurns = parseInt(document.getElementById('edit-targetTurns').value);
+                    if (isNaN(targetTurns) || targetTurns < 1) {
+                        throw new Error('目标轮次必须是大于0的整数');
+                    }
+                    console.log('[前端] 保存group2额度:', currentEditUser.username, 'targetTurns:', targetTurns);
+                    await API.setUserQuota(currentEditUser.username, undefined, targetTurns);
+                }
+                
+                console.log('[前端] 保存完成，等待1秒后刷新用户列表...');
+                closeEditModal();
+                
+                // 等待1秒，确保数据库写入完成
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                await loadUsers();
+                console.log('[前端] 用户列表已刷新');
+            } catch (error) {
+                errorDiv.textContent = '保存失败: ' + error.message;
+                errorDiv.classList.remove('hidden');
+            }
+        });
+
+        // 刷新用户列表（添加防抖）
+        let refreshTimeout = null;
+        function refreshUsers() {
+            // 清除之前的定时器
+            if (refreshTimeout) {
+                clearTimeout(refreshTimeout);
+            }
+            
+            // 如果正在加载，直接返回
+            if (isLoadingUsers) {
+                console.log('[前端] 正在加载中，忽略刷新请求');
+                return;
+            }
+            
+            // 防抖：300ms内只执行一次
+            refreshTimeout = setTimeout(() => {
+                loadUsers();
+                refreshTimeout = null;
+            }, 300);
+        }
+
+        // 显示错误信息
+        function showError(message) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = message;
+            errorDiv.classList.remove('hidden');
+            setTimeout(() => {
+                errorDiv.classList.add('hidden');
+            }, 5000);
+        }
+
+        function showSuccess(message) {
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.textContent = message;
+            errorDiv.className = 'px-4 py-3 bg-green-100 text-green-800 rounded-lg mb-4';
+            errorDiv.classList.remove('hidden');
+            setTimeout(() => {
+                errorDiv.classList.add('hidden');
+                errorDiv.className = 'px-4 py-3 bg-red-100 text-red-800 rounded-lg mb-4 hidden';
+            }, 3000);
+        }
+
+        // 登出
+        function logout() {
+            if (confirm('确定要退出登录吗？')) {
+                if (typeof Storage !== 'undefined' && Storage.clearAuth) {
+                    Storage.clearAuth();
+                } else {
+                    localStorage.removeItem('auth_token');
+                    localStorage.removeItem('user_info');
+                }
+                window.location.href = 'cplus.html';
+            }
+        }
+
+        // 初始化图标
+        lucide.createIcons();
+    </script>
+</body>
+</html>
+

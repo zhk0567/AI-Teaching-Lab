@@ -12,7 +12,13 @@ const Resizer = {
      * 初始化分隔条
      */
     init() {
-        const savedWidth = localStorage.getItem('leftPanelWidth');
+        let savedWidth = null;
+        if (typeof Storage !== 'undefined' && Storage.getLeftPanelWidth) {
+            savedWidth = Storage.getLeftPanelWidth();
+        } else {
+            savedWidth = localStorage.getItem('leftPanelWidth');
+        }
+        
         if (savedWidth) {
             const leftPanel = document.getElementById('left-panel');
             if (leftPanel) {
@@ -56,9 +62,26 @@ const Resizer = {
         const diff = e.clientX - this.startX;
         let newWidth = this.startWidth + diff;
 
-        const minWidth = PLACEHOLDER_CONFIG.MIN_LEFT_PANEL_WIDTH;
-        const maxWidth = containerWidth * PLACEHOLDER_CONFIG.MAX_LEFT_PANEL_WIDTH_RATIO;
+        // 计算最小和最大宽度限制（左侧面板）
+        const minWidthByRatio = containerWidth * PLACEHOLDER_CONFIG.MIN_LEFT_PANEL_WIDTH_RATIO;
+        const minWidth = Math.max(
+            PLACEHOLDER_CONFIG.MIN_LEFT_PANEL_WIDTH,  // 固定最小宽度
+            minWidthByRatio                           // 基于比例的最小宽度
+        );
+        
+        // 计算右侧面板的最小宽度限制
+        const minRightWidthByRatio = containerWidth * PLACEHOLDER_CONFIG.MIN_RIGHT_PANEL_WIDTH_RATIO;
+        const minRightWidth = Math.max(
+            PLACEHOLDER_CONFIG.MIN_RIGHT_PANEL_WIDTH,  // 固定最小宽度
+            minRightWidthByRatio                       // 基于比例的最小宽度
+        );
+        
+        // 左侧面板的最大宽度 = 容器宽度 - 右侧面板最小宽度
+        const maxWidthByRightLimit = containerWidth - minRightWidth;
+        const maxWidthByRatio = containerWidth * PLACEHOLDER_CONFIG.MAX_LEFT_PANEL_WIDTH_RATIO;
+        const maxWidth = Math.min(maxWidthByRatio, maxWidthByRightLimit);
 
+        // 限制在合理范围内
         newWidth = Math.max(minWidth, Math.min(newWidth, maxWidth));
         
         // 禁用过渡动画以实现即时响应
@@ -74,7 +97,12 @@ const Resizer = {
             this.isResizing = false;
 
             const leftPanel = document.getElementById('left-panel');
-            localStorage.setItem('leftPanelWidth', leftPanel.style.width);
+            const width = leftPanel.style.width;
+            if (typeof Storage !== 'undefined' && Storage.setLeftPanelWidth) {
+                Storage.setLeftPanelWidth(width);
+            } else {
+                localStorage.setItem('leftPanelWidth', width);
+            }
             
             // 恢复过渡动画（仅在拖动结束后）
             leftPanel.style.transition = '';

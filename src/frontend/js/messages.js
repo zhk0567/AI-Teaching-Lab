@@ -8,11 +8,21 @@ const Messages = {
      * 添加消息
      * @param {string} role - 角色 ('user' 或 'ai')
      * @param {string} text - 消息文本
+     * @param {boolean} isInitialMessage - 是否为初始欢迎消息（不需要验证）
      */
-    append(role, text) {
+    append(role, text, isInitialMessage = false) {
         const box = Utils.getElement('chat-messages');
         if (!box) {
             return;
+        }
+
+        // 如果是AI消息，检查是否已经有其他AI消息（排除打字指示器）
+        if (role === 'ai') {
+            const existingAiMessages = box.querySelectorAll('.flex.justify-start:not(.typing-indicator)');
+            // 如果没有其他AI消息，自动标记为初始消息
+            if (existingAiMessages.length === 0) {
+                isInitialMessage = true;
+            }
         }
 
         const div = Utils.createElement('div', 
@@ -27,8 +37,14 @@ const Messages = {
             // AI消息使用Markdown渲染
             const markdownHtml = Utils.markdownToHtml(text);
             contentHtml = `<div class="prose prose-sm max-w-none ai-message-content">${markdownHtml}</div>`;
-            contentHtml = this._wrapAiMessage(contentHtml);
-            div.onclick = this._handleAiMessageClick.bind(this);
+            contentHtml = this._wrapAiMessage(contentHtml, isInitialMessage);
+            
+            // 如果是初始消息，标记为不需要验证
+            if (isInitialMessage) {
+                div.dataset.initialMessage = 'true';
+            } else {
+                div.onclick = this._handleAiMessageClick.bind(this);
+            }
         } else {
             // 用户消息保持纯文本
             contentHtml = `<div class="whitespace-pre-wrap text-sm">${Utils.escapeHtml(text)}</div>`;
@@ -50,6 +66,21 @@ const Messages = {
             const bubble = div.querySelector('.bg-white');
             if (bubble) {
                 bubble.dataset.originalText = text;
+                
+                    // 如果不是初始消息，给整个消息气泡添加点击事件来触发验证
+                if (!isInitialMessage) {
+                    bubble.onclick = (e) => {
+                        // 如果点击的是按钮或链接，不触发验证
+                        if (e.target.closest('button') || e.target.closest('a') || e.target.closest('code')) {
+                            return;
+                        }
+                        // 触发验证
+                        const verifyBtn = bubble.querySelector('.verify-btn');
+                        if (verifyBtn && verifyBtn.dataset.verified !== 'true') {
+                            Messages.verifyMessage({ target: verifyBtn, stopPropagation: () => {} });
+                        }
+                    };
+                }
             }
             
             // 显示操作按钮（非流式输出时，立即显示）
@@ -63,17 +94,26 @@ const Messages = {
     /**
      * 包装AI消息
      * @private
+     * @param {string} contentHtml - 消息内容HTML
+     * @param {boolean} isInitialMessage - 是否为初始消息（不需要验证）
      */
-    _wrapAiMessage(contentHtml) {
+    _wrapAiMessage(contentHtml, isInitialMessage = false) {
+        // 如果是初始消息，不添加验证按钮
+        const verifyButton = isInitialMessage ? '' : `
+                <button onclick="Messages.verifyMessage(event)" 
+                        class="verify-btn hidden items-center gap-1 text-amber-500 text-[10px] hover:text-amber-600 transition-colors cursor-pointer px-2 py-1 rounded hover:bg-amber-50"
+                        title="点击标记为已阅读">
+                    <i data-lucide="mouse-pointer-2" width="10" height="10"></i> 
+                    <span class="verify-text">点击验证</span>
+                </button>`;
+        
         return `
-            <div class="mb-1 text-xs font-bold text-gray-400 flex justify-between items-center">
+            <div class="mb-1 text-xs font-bold text-gray-400">
                 AI 导师
-                <span class="hidden group-hover:flex items-center gap-1 text-amber-500 text-[10px] animate-pulse">
-                    <i data-lucide="mouse-pointer-2" width="10"></i> 点击验证
-                </span>
             </div>
             ${contentHtml}
-            <div class="ai-action-buttons mt-3 pt-3 border-t border-gray-100 flex items-center gap-2 hidden group-hover:flex transition-opacity">
+            <div class="ai-action-buttons mt-3 pt-3 border-t border-gray-100 flex items-center justify-between gap-2 hidden transition-opacity">
+                <div class="flex items-center gap-2">
                 <button onclick="Messages.copyMessage(event)" 
                         class="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 transition-colors px-2 py-1 rounded hover:bg-gray-50"
                         title="复制回复">
@@ -85,7 +125,9 @@ const Messages = {
                         title="重新生成">
                     <i data-lucide="refresh-cw" width="14" height="14"></i>
                     <span>刷新</span>
-                </button>
+                    </button>
+                </div>
+                ${verifyButton}
             </div>`;
     },
 
@@ -99,6 +141,94 @@ const Messages = {
     },
 
     /**
+     * 验证消息（标记为已阅读）
+     * @param {Event} event - 点击事件
+     */
+    verifyMessage(event) {
+        event.stopPropagation();
+        
+        const button = event.target.closest('.verify-btn');
+        if (!button) {
+            return;
+        }
+
+        // 检查是否已经验证过
+        if (button.dataset.verified === 'true') {
+            return;
+        }
+
+        // 标记为已验证
+        button.dataset.verified = 'true';
+        
+        // 更新按钮样式和文本
+        const verifyText = button.querySelector('.verify-text');
+        const icon = button.querySelector('i');
+        
+        if (verifyText) {
+            verifyText.textContent = '已验证';
+        }
+        
+        if (icon) {
+            // 更换图标为勾选图标
+            icon.setAttribute('data-lucide', 'check-circle');
+            // 重新初始化图标
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        }
+        
+        // 更新按钮样式
+        button.classList.remove('text-amber-500', 'hover:text-amber-600', 'hover:bg-amber-50');
+        button.classList.add('text-green-500', 'hover:text-green-600', 'hover:bg-green-50');
+        button.classList.remove('animate-pulse');
+        
+        // 添加成功反馈动画
+        button.style.transform = 'scale(1.1)';
+        setTimeout(() => {
+            button.style.transform = 'scale(1)';
+            button.style.transition = 'transform 0.2s';
+        }, 200);
+    },
+
+    /**
+     * 检查最后一条AI消息是否已验证
+     * @returns {boolean} - 如果最后一条AI消息已验证，返回true；如果没有AI消息或未验证，返回false
+     */
+    isLastAiMessageVerified() {
+        const box = Utils.getElement('chat-messages');
+        if (!box) {
+            return true; // 如果没有消息框，允许发送（可能是首次发送）
+        }
+
+        // 从后往前查找最后一条AI消息
+        const allMessages = Array.from(box.querySelectorAll('.flex.justify-start'));
+        if (allMessages.length === 0) {
+            return true; // 没有消息，允许发送
+        }
+
+        // 找到最后一条AI消息（justify-start表示AI消息）
+        const lastAiMessage = allMessages[allMessages.length - 1];
+        if (!lastAiMessage) {
+            return true; // 没有AI消息，允许发送
+        }
+
+        // 如果是初始消息，不需要验证
+        if (lastAiMessage.dataset.initialMessage === 'true') {
+            return true;
+        }
+
+        // 查找验证按钮
+        const verifyBtn = lastAiMessage.querySelector('.verify-btn');
+        if (!verifyBtn) {
+            // 如果没有验证按钮，可能是旧消息或用户消息，允许发送
+            return true;
+        }
+
+        // 检查是否已验证
+        return verifyBtn.dataset.verified === 'true';
+    },
+
+    /**
      * 创建AI消息容器（用于流式输出）
      * @returns {HTMLElement} - 消息内容元素
      */
@@ -108,19 +238,34 @@ const Messages = {
             return null;
         }
 
+        // 检查是否已经有其他AI消息（排除打字指示器）
+        const existingAiMessages = box.querySelectorAll('.flex.justify-start:not(.typing-indicator)');
+        const isFirstAiMessage = existingAiMessages.length === 0;
+
         const div = Utils.createElement('div', 'flex justify-start');
+        // 如果是第一条AI消息，标记为不需要验证
+        if (isFirstAiMessage) {
+            div.dataset.initialMessage = 'true';
+        }
         const bubbleClass = 'bg-white text-slate-700 border border-gray-200 rounded-tl-none hover:shadow-md cursor-pointer group relative';
+
+        // 如果是第一条AI消息，不添加验证按钮
+        const verifyButton = isFirstAiMessage ? '' : `
+                    <button onclick="Messages.verifyMessage(event)" 
+                            class="verify-btn hidden items-center gap-1 text-amber-500 text-[10px] hover:text-amber-600 transition-colors cursor-pointer px-2 py-1 rounded hover:bg-amber-50"
+                            title="点击标记为已阅读">
+                        <i data-lucide="mouse-pointer-2" width="10" height="10"></i> 
+                        <span class="verify-text">点击验证</span>
+                    </button>`;
 
         div.innerHTML = `
             <div class="max-w-[80%] rounded-2xl p-4 text-sm leading-relaxed shadow-sm transition-all ${bubbleClass}">
-                <div class="mb-1 text-xs font-bold text-gray-400 flex justify-between items-center">
+                <div class="mb-1 text-xs font-bold text-gray-400">
                     AI 导师
-                    <span class="hidden group-hover:flex items-center gap-1 text-amber-500 text-[10px] animate-pulse">
-                        <i data-lucide="mouse-pointer-2" width="10"></i> 点击验证
-                    </span>
                 </div>
                 <div class="prose prose-sm max-w-none ai-message-content"></div>
-                <div class="ai-action-buttons mt-3 pt-3 border-t border-gray-100 flex items-center gap-2 hidden group-hover:flex transition-opacity">
+                <div class="ai-action-buttons mt-3 pt-3 border-t border-gray-100 flex items-center justify-between gap-2 hidden transition-opacity">
+                    <div class="flex items-center gap-2">
                     <button onclick="Messages.copyMessage(event)" 
                             class="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 transition-colors px-2 py-1 rounded hover:bg-gray-50"
                             title="复制回复">
@@ -132,13 +277,33 @@ const Messages = {
                             title="重新生成">
                         <i data-lucide="refresh-cw" width="14" height="14"></i>
                         <span>刷新</span>
-                    </button>
+                        </button>
+                    </div>
+                    ${verifyButton}
                 </div>
             </div>`;
 
         box.appendChild(div);
         Utils.scrollToBottom(box);
         lucide.createIcons();
+
+        // 如果不是第一条AI消息，给整个消息气泡添加点击事件来触发验证
+        if (!isFirstAiMessage) {
+            const bubble = div.querySelector('.bg-white');
+            if (bubble) {
+                bubble.onclick = (e) => {
+                    // 如果点击的是按钮或链接，不触发验证
+                    if (e.target.closest('button') || e.target.closest('a') || e.target.closest('code')) {
+                        return;
+                    }
+                    // 触发验证
+                    const verifyBtn = bubble.querySelector('.verify-btn');
+                    if (verifyBtn && verifyBtn.dataset.verified !== 'true') {
+                        Messages.verifyMessage({ target: verifyBtn, stopPropagation: () => {} });
+                    }
+                };
+            }
+        }
 
         div.onclick = this._handleAiMessageClick.bind(div);
 
@@ -163,6 +328,13 @@ const Messages = {
             const bubble = element.closest('.bg-white');
             if (bubble) {
                 bubble.dataset.originalText = text;
+                
+                // 确保在流式输出过程中按钮保持隐藏
+                const buttonContainer = bubble.querySelector('.ai-action-buttons');
+                if (buttonContainer) {
+                    buttonContainer.classList.add('hidden');
+                    buttonContainer.classList.remove('opacity-0', 'group-hover:opacity-100');
+                }
             }
             
             const chatBox = Utils.getElement('chat-messages');
@@ -183,9 +355,16 @@ const Messages = {
         if (bubble) {
             const buttonContainer = bubble.querySelector('.ai-action-buttons');
             if (buttonContainer) {
-                // 移除hidden类，显示按钮（仅在hover时显示）
-                buttonContainer.classList.remove('hidden');
-                buttonContainer.classList.add('opacity-0', 'group-hover:opacity-100');
+                // 移除hidden类，始终显示按钮
+                buttonContainer.classList.remove('hidden', 'opacity-0', 'group-hover:opacity-100', 'group-hover:flex');
+                buttonContainer.classList.add('flex');
+            }
+            
+            // 显示验证按钮（消息生成完成后）
+            const verifyBtn = bubble.querySelector('.verify-btn');
+            if (verifyBtn) {
+                verifyBtn.classList.remove('hidden', 'group-hover:flex');
+                verifyBtn.classList.add('flex');
             }
         }
     },
@@ -378,11 +557,11 @@ const Messages = {
             if (AppState.currentGroup === GROUP_CONFIG.GROUP2.NAME) {
                 // 延迟触发，等待消息渲染完成
                 setTimeout(() => {
-                    if (typeof Main !== 'undefined' && Main._shouldTriggerHighlightTask) {
-                        const shouldTrigger = Main._shouldTriggerHighlightTask();
+                    if (typeof Mechanisms !== 'undefined' && Mechanisms.shouldTriggerHighlightTask) {
+                        const shouldTrigger = Mechanisms.shouldTriggerHighlightTask();
                         if (shouldTrigger) {
                             AppState.showHighlightTask = true;
-                            Main._setupHighlightTask();
+                            Mechanisms.setupHighlightTask();
                             UI.update();
                         }
                     }
