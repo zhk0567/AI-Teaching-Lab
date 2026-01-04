@@ -120,13 +120,18 @@ const UI = {
         }
 
         if (AppState.turnCount === 0) {
+            // 第一次，显示步骤一（开始学习定义）
             this._renderStartPrompt(container);
         } else if (AppState.isGroup1LimitReached()) {
             this._renderLimitReached(container);
         } else if (AppState.isGroup2TargetReached()) {
             this._renderGroup2Completed(container);
-        } else {
+        } else if (AppState.hasUsedLeftPrompt) {
+            // 只有使用过左侧提示词，才显示步骤二（深度探索）
             this._renderPromptOptions(container);
+        } else {
+            // 如果第一次没有使用左侧提示词，不显示步骤二
+            this._renderNoPromptMessage(container);
         }
     },
 
@@ -225,6 +230,25 @@ const UI = {
         }
 
         container.innerHTML = html;
+    },
+
+    /**
+     * 渲染无提示词消息（当用户第一次没有使用左侧提示词时）
+     * @private
+     */
+    _renderNoPromptMessage(container) {
+        container.innerHTML = `
+            <div class="p-4 bg-gray-50 rounded-lg text-center border border-gray-200 mt-10">
+                <div class="mx-auto text-gray-400 mb-2 flex justify-center">
+                    <i data-lucide="info" width="24" height="24"></i>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">
+                    提示：左侧提示词是辅助工具。如需使用，请在第一次对话时点击左侧提示词。
+                </p>
+            </div>`;
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
     },
 
     /**

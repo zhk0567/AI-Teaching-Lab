@@ -35,9 +35,15 @@ const Messages = {
         let contentHtml;
         if (role === 'ai') {
             // AI消息使用Markdown渲染
-            const markdownHtml = Utils.markdownToHtml(text);
-            contentHtml = `<div class="prose prose-sm max-w-none ai-message-content">${markdownHtml}</div>`;
-            contentHtml = this._wrapAiMessage(contentHtml, isInitialMessage);
+            try {
+                const markdownHtml = Utils.markdownToHtml(text);
+                contentHtml = `<div class="prose prose-sm max-w-none ai-message-content">${markdownHtml}</div>`;
+                contentHtml = this._wrapAiMessage(contentHtml, isInitialMessage);
+            } catch (error) {
+                // 降级为纯文本
+                contentHtml = `<div class="prose prose-sm max-w-none ai-message-content">${Utils.escapeHtml(text)}</div>`;
+                contentHtml = this._wrapAiMessage(contentHtml, isInitialMessage);
+            }
             
             // 如果是初始消息，标记为不需要验证
             if (isInitialMessage) {
@@ -585,10 +591,6 @@ const Messages = {
 
             // 注意：刷新消息不应该增加轮次，因为这只是重新生成同一轮次的AI回复
             // 轮次应该只在用户发送新消息时增加
-            console.log('[日志] 刷新消息完成，不增加轮次', {
-                currentTurnCount: AppState.turnCount,
-                reason: '刷新只是重新生成回复，不是新对话轮次'
-            });
 
             // 更新流式输出的消息
             if (AppState.currentAiMessageElement) {
@@ -623,7 +625,6 @@ const Messages = {
             AppState.currentAiMessageElement = null;
 
         } catch (error) {
-            console.error('Error regenerating message:', error);
             Messages.removeTypingIndicator();
             AppState.isAiTyping = false;
             Messages.append('ai', 

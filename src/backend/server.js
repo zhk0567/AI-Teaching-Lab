@@ -268,39 +268,39 @@ async function startServer() {
             console.log('提示: 将 stu_rnd_grp.csv 放在项目根目录可自动导入用户');
             
             // 如果没有CSV文件，初始化测试用户（用于开发测试）
-            const testUsers = [
-                { username: 'group1_user1', group: 'group1', groupId: '1', maxTurns: 2, conditionDepth: 0, conditionTurns: 0 },
-                { username: 'group1_user2', group: 'group1', groupId: '1', maxTurns: 2, conditionDepth: 0, conditionTurns: 0 },
-                { username: 'group2_user1', group: 'group2', groupId: '2', targetTurns: 6, conditionDepth: 0, conditionTurns: 1 },
-                { username: 'group2_user2', group: 'group2', groupId: '2', targetTurns: 6, conditionDepth: 0, conditionTurns: 1 }
-            ];
-            
-            for (const userData of testUsers) {
-                try {
-                    let dbUser = await Users.findByUsername(userData.username);
-                    if (!dbUser) {
-                        const userId = await Users.create({
-                            student_id: userData.username,
-                            group_id: userData.groupId,
-                            condition_depth: userData.conditionDepth,
-                            condition_turns: userData.conditionTurns,
-                            consent_agreed: 1,
-                            max_turns: userData.maxTurns || null,
-                            target_turns: userData.targetTurns || null
+        const testUsers = [
+            { username: 'group1_user1', group: 'group1', groupId: '1', maxTurns: 2, conditionDepth: 0, conditionTurns: 0 },
+            { username: 'group1_user2', group: 'group1', groupId: '1', maxTurns: 2, conditionDepth: 0, conditionTurns: 0 },
+            { username: 'group2_user1', group: 'group2', groupId: '2', targetTurns: 6, conditionDepth: 0, conditionTurns: 1 },
+            { username: 'group2_user2', group: 'group2', groupId: '2', targetTurns: 6, conditionDepth: 0, conditionTurns: 1 }
+        ];
+        
+        for (const userData of testUsers) {
+            try {
+                let dbUser = await Users.findByUsername(userData.username);
+                if (!dbUser) {
+                    const userId = await Users.create({
+                        student_id: userData.username,
+                        group_id: userData.groupId,
+                        condition_depth: userData.conditionDepth,
+                        condition_turns: userData.conditionTurns,
+                        consent_agreed: 1,
+                        max_turns: userData.maxTurns || null,
+                        target_turns: userData.targetTurns || null
+                    });
+                    setUserIdMapping(userData.username, userId);
+                } else {
+                    setUserIdMapping(userData.username, dbUser.user_id);
+                    // 如果数据库中没有max_turns或target_turns，更新它们
+                    if ((userData.maxTurns && !dbUser.max_turns) || (userData.targetTurns && !dbUser.target_turns)) {
+                        await Users.update(dbUser.user_id, {
+                            max_turns: userData.maxTurns || dbUser.max_turns,
+                            target_turns: userData.targetTurns || dbUser.target_turns
                         });
-                        setUserIdMapping(userData.username, userId);
-                    } else {
-                        setUserIdMapping(userData.username, dbUser.user_id);
-                        // 如果数据库中没有max_turns或target_turns，更新它们
-                        if ((userData.maxTurns && !dbUser.max_turns) || (userData.targetTurns && !dbUser.target_turns)) {
-                            await Users.update(dbUser.user_id, {
-                                max_turns: userData.maxTurns || dbUser.max_turns,
-                                target_turns: userData.targetTurns || dbUser.target_turns
-                            });
-                        }
                     }
-                } catch (error) {
-                    console.error(`初始化用户 ${userData.username} 失败:`, error);
+                }
+            } catch (error) {
+                console.error(`初始化用户 ${userData.username} 失败:`, error);
                 }
             }
         }

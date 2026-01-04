@@ -73,24 +73,36 @@ const Utils = {
      * @returns {string} - HTML字符串
      */
     markdownToHtml(markdown) {
+        // 检查marked库是否加载
         if (typeof marked === 'undefined') {
-            // 如果没有marked库，返回转义的文本
             return this.escapeHtml(markdown);
         }
 
-        // 配置marked选项
-        marked.setOptions({
-            breaks: true,
-            gfm: true,
-            headerIds: false,
-            mangle: false
-        });
-
         try {
-            const html = marked.parse(markdown);
+            let html;
+            
+            // marked@11 使用新的API，需要先配置选项
+            if (typeof marked.setOptions === 'function') {
+                marked.setOptions({
+                    breaks: true,
+                    gfm: true,
+                    headerIds: false,
+                    mangle: false
+                });
+            }
+            
+            // 尝试使用parse方法（marked@11+）
+            if (typeof marked.parse === 'function') {
+                html = marked.parse(markdown);
+            } else if (typeof marked === 'function') {
+                // 旧版本API
+                html = marked(markdown);
+            } else {
+                return this.escapeHtml(markdown);
+            }
+            
             return html;
         } catch (e) {
-            console.error('Markdown parsing error:', e);
             return this.escapeHtml(markdown);
         }
     },

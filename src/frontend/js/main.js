@@ -14,13 +14,11 @@ const Main = {
     async init() {
         // 如果正在初始化，直接返回
         if (this.isInitializing) {
-            console.warn('初始化正在进行中，跳过重复调用');
             return;
         }
         
         // 如果已经初始化，只更新UI，不重新初始化
         if (this.isInitialized) {
-            console.log('应用已初始化，仅更新UI');
             this._updateUserInfoDisplay();
             if (typeof UI !== 'undefined' && UI.update) {
                 UI.update();
@@ -31,8 +29,6 @@ const Main = {
         this.isInitializing = true;
         
         try {
-            console.log('开始初始化应用...');
-            
             // 首先清理可能残留的状态，避免卡住
             AppState.isAiTyping = false;
             AppState.isInputLocked = false;
@@ -73,7 +69,7 @@ const Main = {
                     lucide.createIcons();
                 }
             } catch (e) {
-                console.warn('初始化图标失败:', e.message);
+                // 静默失败
             }
             
             try {
@@ -81,7 +77,7 @@ const Main = {
                     Resizer.init();
                 }
             } catch (e) {
-                console.warn('初始化Resizer失败:', e.message);
+                // 静默失败
             }
             
             // 先设置输入监听器，确保用户可以立即使用
@@ -108,8 +104,8 @@ const Main = {
             }
             
             // 异步加载任务配置和用户进度，不阻塞初始化（添加超时保护）
-            AppState.loadTopicConfig().catch(error => {
-                console.warn('加载任务配置失败，使用默认配置:', error.message);
+            AppState.loadTopicConfig().catch(() => {
+                // 静默失败，使用默认配置
             }).then(async () => {
                 // 任务配置加载完成后，更新UI（包括标题和提示）
                 if (typeof UI !== 'undefined' && UI.update) {
@@ -122,8 +118,8 @@ const Main = {
                 await this.loadTodayConcepts();
             });
             
-            AppState.loadProgress().catch(error => {
-                console.warn('加载进度失败，继续使用默认值:', error.message);
+            AppState.loadProgress().catch(() => {
+                // 静默失败，使用默认值
             }).then(() => {
                 // 进度加载完成后，更新UI
                 this._updateUserInfoDisplay();
@@ -137,8 +133,7 @@ const Main = {
             });
             
             // 加载消息历史（在重置之前，这样重置时不会清空历史消息）
-            this.loadMessageHistory().catch(error => {
-                console.warn('加载消息历史失败:', error.message);
+            this.loadMessageHistory().catch(() => {
                 // 如果加载失败，确保显示欢迎消息
                 const chatBox = Utils.getElement('chat-messages');
                 if (chatBox && chatBox.children.length === 0) {
@@ -155,10 +150,8 @@ const Main = {
             
             // 启动定期刷新进度（每30秒刷新一次，确保管理员设置后能及时更新）
             this.startProgressRefresh();
-            
-            console.log('应用初始化完成');
         } catch (error) {
-            console.error('初始化失败:', error);
+            // 初始化失败，静默处理
             // 即使出错也更新用户信息显示
             this._updateUserInfoDisplay();
             // 确保状态被清理
@@ -195,31 +188,24 @@ const Main = {
     async loadMessageHistory() {
         try {
             if (typeof API === 'undefined' || !API.getMessages) {
-                console.warn('API.getMessages 不可用，跳过加载消息历史');
                 return;
             }
             
             const result = await API.getMessages();
-            console.log('[消息历史] API返回结果:', result);
             
             // 处理不同的响应格式
             let messages = [];
             let sessionId = null;
             
             if (result.success && result.messages) {
-                // 标准格式：{success: true, messages: [...], sessionId: ...}
                 messages = result.messages || [];
                 sessionId = result.sessionId || null;
             } else if (Array.isArray(result.messages)) {
-                // 兼容格式：{messages: [...], sessionId: ...}
                 messages = result.messages;
                 sessionId = result.sessionId || null;
             } else if (Array.isArray(result)) {
-                // 直接是数组格式
                 messages = result;
             }
-            
-            console.log(`[消息历史] 解析后: ${messages.length} 条消息, 会话ID: ${sessionId}`);
             
             // 保存会话ID
             if (sessionId) {
@@ -228,7 +214,6 @@ const Main = {
             
             // 如果有消息历史，显示它们
             if (messages && messages.length > 0) {
-                console.log(`[消息历史] 开始显示 ${messages.length} 条消息`);
                 const chatBox = Utils.getElement('chat-messages');
                 if (chatBox) {
                     // 完全清空聊天框（包括欢迎消息）
@@ -237,9 +222,23 @@ const Main = {
                     // 按顺序显示历史消息
                     let aiMessageCount = 0;
                     messages.forEach((msg, index) => {
-                        if (msg.role === 'user' || msg.role === 'assistant') {
-                            const role = msg.role === 'assistant' ? 'ai' : 'user';
+                        
+                        // 支持多种role格式：'user', 'assistant', 'ai'
+                        if (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'ai') {
+                            const role = (msg.role === 'assistant' || msg.role === 'ai') ? 'ai' : 'user';
                             const content = msg.content || msg.text || '';
+                            
+                            if (!content || content.trim() === '') {
+                                return;
+                            }
+                            
+                            // 如果是用户消息，检查是否使用了左侧提示词
+                            if (role === 'user') {
+                                const templateId = this._extractTemplateId(content);
+                                if (templateId) {
+                                    AppState.hasUsedLeftPrompt = true;
+                                }
+                            }
                             
                             // 判断是否为初始消息（第一条AI消息）
                             const isInitialMessage = role === 'ai' && aiMessageCount === 0;
@@ -248,7 +247,11 @@ const Main = {
                             }
                             
                             if (typeof Messages !== 'undefined' && Messages.append) {
-                                Messages.append(role, content, isInitialMessage);
+                                try {
+                                    Messages.append(role, content, isInitialMessage);
+                                } catch (error) {
+                                    // 静默失败
+                                }
                                 
                                 // 如果是AI消息且已验证，标记为已验证
                                 if (role === 'ai' && index < messages.length - 1) {
@@ -281,6 +284,11 @@ const Main = {
                         }
                     });
                     
+                    // 消息历史加载完成后，更新UI（因为 hasUsedLeftPrompt 可能已改变）
+                    if (typeof UI !== 'undefined' && UI.update) {
+                        UI.update();
+                    }
+                    
                     // 滚动到底部
                     if (typeof Utils !== 'undefined' && Utils.scrollToBottom) {
                         Utils.scrollToBottom(chatBox);
@@ -290,28 +298,13 @@ const Main = {
                     if (typeof UI !== 'undefined' && UI.updateInputState) {
                         UI.updateInputState();
                     }
-                    
-                    // 确保UI更新
-                    if (typeof UI !== 'undefined' && UI.update) {
-                        UI.update();
-                    }
-                    
-                    console.log(`[消息历史] 消息显示完成，共 ${messages.length} 条`);
                 }
             } else {
                 // 如果没有消息历史，显示欢迎消息
-                console.log('[消息历史] 没有历史消息，显示欢迎消息');
                 this._showWelcomeMessage();
             }
         } catch (error) {
             // 如果加载失败，不影响正常使用，显示欢迎消息
-            console.warn('加载消息历史失败:', error.message);
-            console.error('加载消息历史详细错误:', error);
-            
-            // 如果是Nginx配置问题，给出更明确的提示
-            if (error.message && (error.message.includes('HTML') || error.message.includes('Nginx'))) {
-                console.error('[重要] Nginx配置可能未更新。请在服务器上执行: sudo systemctl reload nginx');
-            }
             
             // 只有在聊天框为空时才显示欢迎消息
             const chatBox = Utils.getElement('chat-messages');
@@ -336,7 +329,6 @@ const Main = {
         this.progressRefreshInterval = setInterval(async () => {
             // 如果正在刷新，跳过本次
             if (isRefreshing) {
-                console.warn('进度刷新正在进行中，跳过本次');
                 return;
             }
             
@@ -346,7 +338,6 @@ const Main = {
                 // 更新用户信息显示（包括进度）
                 this._updateUserInfoDisplay();
             } catch (error) {
-                console.error('定期刷新进度失败:', error);
                 // 失败不影响使用，继续运行
             } finally {
                 isRefreshing = false;
@@ -390,7 +381,6 @@ const Main = {
             if (AppState.userInfo && AppState.userInfo.username) {
                 // 严格验证：确保 group 字段存在
                 if (!AppState.userInfo.group) {
-                    console.error('严重错误：AppState.userInfo 缺少 group 字段！', AppState.userInfo);
                     userInfoElement.textContent = `${AppState.userInfo.username} - 未知组别`;
                 } else {
                     const groupLabel = AppState.userInfo.group === GROUP_CONFIG.GROUP1.NAME
@@ -407,7 +397,6 @@ const Main = {
                 if (userInfo && userInfo.username) {
                     // 严格验证：确保 group 字段存在
                     if (!userInfo.group) {
-                        console.error('严重错误：userInfo 缺少 group 字段！', userInfo);
                         userInfoElement.textContent = `${userInfo.username} - 未知组别`;
                     } else {
                         const groupLabel = userInfo.group === GROUP_CONFIG.GROUP1.NAME
@@ -497,6 +486,9 @@ const Main = {
     },
 
     fillPrompt(text) {
+        // 标记用户使用了左侧提示词
+        AppState.hasUsedLeftPrompt = true;
+        
         // 记录选择模板事件
         if (typeof Tracking !== 'undefined' && Tracking.trackSelectTemplate) {
             const templateId = this._extractTemplateId(text);
@@ -555,7 +547,6 @@ const Main = {
     async sendMessage() {
         // 防止重复请求：如果正在发送消息，直接返回
         if (this._isSendingMessage) {
-            console.warn('[防重复] 消息正在发送中，忽略重复请求');
             return;
         }
 
@@ -603,15 +594,7 @@ const Main = {
             return;
         }
 
-        // 记录发送前的状态
-        const beforeTurnCount = AppState.turnCount;
         const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        console.log(`[日志] [${requestId}] 开始发送消息`, {
-            beforeTurnCount,
-            currentGroup: AppState.currentGroup,
-            messageLength: text.length,
-            timestamp: new Date().toISOString()
-        });
 
         // 标记正在发送消息
         this._isSendingMessage = true;
@@ -651,21 +634,8 @@ const Main = {
             // 创建AI消息容器
             AppState.currentAiMessageElement = Messages.createAiContainer();
 
-            console.log(`[日志] [${requestId}] 调用API发送消息`, {
-                messagePreview: text.substring(0, 50) + (text.length > 50 ? '...' : ''),
-                conversationHistoryLength: AppState.conversationHistory.length
-            });
-
             // 调用API
-            const apiStartTime = Date.now();
             const fullResponse = await API.sendMessage(text);
-            const apiDuration = Date.now() - apiStartTime;
-
-            console.log(`[日志] [${requestId}] API响应完成`, {
-                responseLength: fullResponse?.length || 0,
-                apiDuration: `${apiDuration}ms`,
-                timestamp: new Date().toISOString()
-            });
 
             // 移除打字指示器
             Messages.removeTypingIndicator();
@@ -681,25 +651,8 @@ const Main = {
 
             // 注意：不再在前端增加轮次，因为后端在保存AI消息时已经自动更新了turn_count
             // 前端应该从后端重新加载进度，以保持与数据库同步
-            const beforeTurnCount = AppState.turnCount;
-            
-            console.log(`[日志] [${requestId}] AI回复完成，准备从后端重新加载进度`, {
-                beforeTurnCount,
-                reason: '后端已自动更新turn_count，前端应从后端同步',
-                timestamp: new Date().toISOString()
-            });
-            
             // 从后端重新加载进度（后端会根据消息数量自动计算turn_count）
             await AppState.loadProgress();
-            
-            const afterTurnCount = AppState.turnCount;
-            
-            console.log(`[日志] [${requestId}] 进度已从后端重新加载`, {
-                before: beforeTurnCount,
-                after: afterTurnCount,
-                increment: afterTurnCount - beforeTurnCount,
-                timestamp: new Date().toISOString()
-            });
 
             // 显示操作按钮（复制和刷新）
             if (AppState.currentAiMessageElement) {
@@ -730,10 +683,8 @@ const Main = {
             // 机制C: 视觉奖励（完成6轮对话时）
             // 延迟触发，等待查看解锁完成后再显示奖励
             if (AppState.isGroup2TargetReached()) {
-                console.log('机制C: 检测到完成6轮对话，准备显示奖励');
                 // 延迟触发，确保用户已经查看完消息
                 setTimeout(() => {
-                    console.log('机制C: 触发视觉奖励');
                     // 获取当天的topic名称，添加到概念墙
                     const topicName = AppState.topicConfig?.topic_name || 'C++ 指针';
                     // 点亮概念墙中的当天topic
@@ -746,7 +697,6 @@ const Main = {
             // 机制C: 视觉奖励（完成组别1的轮次时）
             // 对于组别1，完成最大轮次后也添加概念
             if (AppState.currentGroup === GROUP_CONFIG.GROUP1.NAME && AppState.isGroup1LimitReached()) {
-                console.log('机制C: 检测到组别1完成最大轮次，准备添加概念');
                 setTimeout(() => {
                     const topicName = AppState.topicConfig?.topic_name || 'C++ 指针';
                     Mechanisms.lightUpConcept(topicName);
@@ -759,44 +709,19 @@ const Main = {
             this._isSendingMessage = false;
             this._currentRequestId = null;
 
-            console.log(`[日志] [${requestId}] 消息发送完成`, {
-                finalTurnCount: AppState.turnCount,
-                timestamp: new Date().toISOString()
-            });
-
         } catch (error) {
-            console.error(`[日志] [${requestId}] 发送消息失败`, {
-                error: error.message,
-                stack: error.stack,
-                timestamp: new Date().toISOString()
-            });
-            
             // 确保状态被正确清理
             Messages.removeTypingIndicator();
             AppState.isAiTyping = false;
             AppState.currentAiMessageElement = null;
             
-            // 如果已经有部分响应，显示它；否则显示错误消息
-            if (AppState.currentAiMessageElement) {
-                // 如果消息容器已创建，显示错误
-                Messages.append('ai', 
-                    `抱歉，发生了错误。请检查后端服务器是否正在运行（${CONFIG.API_BASE_URL}），或稍后重试。\n\n错误信息：${error.message}`);
-            } else {
-                Messages.append('ai', 
-                    `抱歉，发生了错误。请检查后端服务器是否正在运行（${CONFIG.API_BASE_URL}），或稍后重试。\n\n错误信息：${error.message}`);
-            }
+            // 显示错误消息
+            Messages.append('ai', 
+                `抱歉，发生了错误。请检查后端服务器是否正在运行（${CONFIG.API_BASE_URL}），或稍后重试。\n\n错误信息：${error.message}`);
             
             // 错误时也从后端重新加载进度（因为用户消息可能已经保存）
-            const errorBeforeTurnCount = AppState.turnCount;
-            
-            console.log(`[日志] [${requestId}] 发生错误，尝试从后端重新加载进度`, {
-                beforeTurnCount: errorBeforeTurnCount,
-                timestamp: new Date().toISOString()
-            });
-            
-            // 从后端重新加载进度（不等待完成，避免阻塞）
-            AppState.loadProgress().catch(e => {
-                console.warn(`[日志] [${requestId}] 重新加载进度失败:`, e.message);
+            AppState.loadProgress().catch(() => {
+                // 静默失败
             });
             UI.update();
             
@@ -842,7 +767,7 @@ const Main = {
                 }
             }
         } catch (error) {
-            console.warn('加载当天概念墙失败:', error.message);
+            // 静默失败
         }
     }
 };

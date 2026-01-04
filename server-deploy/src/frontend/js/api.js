@@ -106,7 +106,6 @@ const API = {
                             }
                         } catch (e) {
                             // 忽略解析错误
-                            console.warn('解析流式响应数据失败:', e);
                         }
                     }
                 }
@@ -198,26 +197,16 @@ const API = {
                 window.location.href = 'login.html';
                 throw new Error('登录已过期，请重新登录');
             }
-            // 检查响应类型
-            const contentType = response.headers.get('content-type');
-            if (contentType && !contentType.includes('application/json')) {
-                const text = await response.text();
-                console.error('[API] 收到非JSON响应:', text.substring(0, 200));
-                throw new Error(`服务器返回了HTML而不是JSON。可能是Nginx配置问题。状态码: ${response.status}`);
-            }
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         // 检查响应内容类型
         const contentType = response.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
-            const text = await response.text();
-            console.error('[API] 响应不是JSON格式:', text.substring(0, 200));
             throw new Error('服务器返回了非JSON格式的响应。请检查Nginx配置。');
         }
 
         const data = await response.json();
-        console.log('[API] getMessages 响应数据:', data);
         
         // 处理不同的响应格式
         if (data.success !== undefined) {
@@ -318,10 +307,7 @@ const API = {
                 timeoutPromise
             ]);
         } catch (error) {
-            console.error('保存进度失败:', error);
-            console.error('错误类型:', error.constructor.name);
-            console.error('错误消息:', error.message);
-            console.error('错误堆栈:', error.stack);
+            // 静默失败
         }
     },
 

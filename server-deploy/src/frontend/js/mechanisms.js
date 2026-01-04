@@ -255,9 +255,6 @@ const Mechanisms = {
         
         const trimmedText = selectedText.trim();
         
-        // 记录选择的内容（用于数据收集）
-        console.log('用户选择的内容:', trimmedText);
-        
         // 添加到左侧关键词列表
         Mechanisms.addSelectedKeyword(trimmedText);
         
@@ -308,8 +305,6 @@ const Mechanisms = {
      * 机制C：显示概念掌握奖励
      */
     showConceptMasteredReward() {
-        console.log('机制C: 显示概念掌握奖励');
-        
         // 记录完成目标事件
         if (typeof Tracking !== 'undefined' && Tracking.trackCompleteTarget) {
             Tracking.trackCompleteTarget();
@@ -406,11 +401,8 @@ const Mechanisms = {
      * @param {string} conceptName - 概念名称
      */
     async lightUpConcept(conceptName) {
-        console.log('机制C: 点亮概念', conceptName);
-        
         const container = Utils.getElement('concept-wall-list');
         if (!container) {
-            console.warn('机制C: 未找到概念墙容器');
             return;
         }
 
@@ -430,7 +422,6 @@ const Mechanisms = {
                 await API.saveConcept(conceptName, sessionId, todayStr);
             }
         } catch (error) {
-            console.error('保存概念到数据库失败:', error);
             // 即使保存失败，也继续显示在UI上
         }
 
@@ -439,7 +430,6 @@ const Mechanisms = {
             .map(brick => brick.textContent.trim());
         
         if (existingConcepts.includes(conceptName)) {
-            console.log('机制C: 概念已存在，跳过', conceptName);
             // 如果已存在，高亮它
             const existingBrick = Array.from(container.querySelectorAll('.concept-brick'))
                 .find(brick => brick.textContent.trim() === conceptName);
@@ -457,8 +447,6 @@ const Mechanisms = {
         
         conceptBrick.textContent = conceptName;
         container.appendChild(conceptBrick);
-        
-        console.log('机制C: 概念已添加到概念墙', conceptName);
     }
 };
 
